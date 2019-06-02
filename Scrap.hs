@@ -3,13 +3,16 @@
 module Scrap where
 
 import Control.Effect (runM)
+import Control.Monad.IO.Class
 import Zzz
+
 
 scrap :: IO ()
 scrap = do
-  result <-
-    runM $ runZ3 [] $ do
-      a <- mkBoolVar "a"
-      assert (Eq (Var a) (Lit True))
-      check
-  print result
+  runM $ runZ3 [] $ do
+    a <- mkBoolVar "a"
+    b <- mkBoolVar "b"
+    c <- mkBoolVar "c"
+    assert (a =. true ||. b =. true &&. c =. true)
+    check >>= liftIO . print
+    getModel >>= printModel
