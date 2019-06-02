@@ -8,6 +8,7 @@ library
     base ^>= 4.12,
     fused-effects ^>= 0.4,
     text ^>= 1.2,
+    unordered-containers ^>= 0.2,
     z3 ^>= 408.0,
 
   default-extensions:
@@ -29,6 +30,7 @@ library
     Haskell2010
 
   exposed-modules:
+    Scrap
     Zzz
 
   ghc-options:
