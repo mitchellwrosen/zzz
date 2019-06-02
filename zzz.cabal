@@ -6,10 +6,30 @@ version: 0
 library
   build-depends:
     base ^>= 4.12,
+    fused-effects ^>= 0.4,
+    text ^>= 1.2,
     z3 ^>= 408.0,
+
+  default-extensions:
+    DeriveAnyClass
+    DeriveFunctor
+    DerivingStrategies
+    FlexibleContexts
+    FlexibleInstances
+    GADTSyntax
+    GeneralizedNewtypeDeriving
+    InstanceSigs
+    KindSignatures
+    LambdaCase
+    MultiParamTypeClasses
+    ScopedTypeVariables
+    TypeOperators
 
   default-language:
     Haskell2010
+
+  exposed-modules:
+    Zzz
 
   ghc-options:
     -Wall
