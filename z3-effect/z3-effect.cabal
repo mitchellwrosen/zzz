@@ -1,0 +1,32 @@
+cabal-version: 2.4
+
+name: z3-effect
+version: 0
+
+library
+  build-depends:
+    base ^>= 4.12,
+    fused-effects ^>= 0.4,
+    text ^>= 1.2,
+    z3 == 408.0,
+
+  default-extensions:
+    DeriveAnyClass
+    DeriveFunctor
+    DerivingStrategies
+    FlexibleContexts
+    GADTs
+    InstanceSigs
+    KindSignatures
+    LambdaCase
+    RankNTypes
+    StandaloneDeriving
+
+  default-language:
+    Haskell2010
+
+  exposed-modules:
+    Z3.Effect
+
+  ghc-options:
+    -Wall
