@@ -41,3 +41,12 @@ library
 
   ghc-options:
     -Wall
+
+  other-modules:
+    Framed
+    Function
+    Lit
+    Sort
+    Term
+    Z3
+    Z3C
