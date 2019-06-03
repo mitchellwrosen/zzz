@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Scrap where
 
 import Control.Effect (runM)
@@ -25,9 +23,17 @@ import Zzz
 --   unsat_core (bool) (default: false)
 --   well_sorted_check (bool) (default: false)
 
+blep :: IO ()
+blep =
+  runM $ runZ3 do
+    a <- declare "a" boolSort
+    b <- declare "b" boolSort
+    t <- simplify (xor a b)
+    pure ()
+
 scrap :: IO ()
 scrap = do
-  runM $ runZ3 $ do
+  runM $ runZ3 do
     {-
         (declare-const a Int)
         (declare-fun f (Int Bool) Int)

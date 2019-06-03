@@ -6,7 +6,6 @@ module Z3C
   ) where
 
 import Framed
-import Function
 import Z3 (Z3(..))
 
 import Control.Effect
@@ -17,7 +16,7 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.HashMap.Strict (HashMap)
 import Data.IORef
 import Data.Kind (Type)
-import Data.Text (pack, unpack)
+import Data.Text (Text, pack, unpack)
 
 import qualified Data.HashMap.Strict as HashMap
 import qualified Z3.Base as Z3
@@ -41,11 +40,15 @@ data Z3CEnv
   { z3cContext :: Z3.Context
   , z3cSolver :: Z3.Solver
   -- , z3cSymbolCache :: IORef (HashMap Text Z3.Symbol)
-  , z3cFunctionCache :: IORef (Framed (HashMap Function Z3.FuncDecl))
+  , z3cFunctionCache :: IORef (Framed (HashMap Text Z3.FuncDecl))
+  , z3cVarCache :: IORef (Framed (HashMap Text Z3.AST))
   }
 
 handleZ3 :: MonadIO m => Z3CEnv -> Z3 (Z3C m) x -> m x
-handleZ3 env@(Z3CEnv ctx solver functionCacheRef) = \case
+handleZ3 env@(Z3CEnv ctx solver functionCacheRef varCacheRef) = \case
+  AstToString ast k ->
+    k <$> liftIO (Z3.astToString ctx ast)
+
   Frame action k ->
     let
       inframe =
@@ -148,9 +151,11 @@ handleZ3 env@(Z3CEnv ctx solver functionCacheRef) = \case
   ModelToString model k ->
     k . pack <$> liftIO (Z3.modelToString ctx model)
 
-  SolverAssertCnstr ast k -> do
-    liftIO (Z3.solverAssertCnstr ctx solver ast)
-    pure k
+  Simplify ast k ->
+    k <$> liftIO (Z3.simplify ctx ast)
+
+  SolverAssertCnstr ast k ->
+    k <$ liftIO (Z3.solverAssertCnstr ctx solver ast)
 
   SolverCheck k ->
     k <$> liftIO (Z3.solverCheck ctx solver)
@@ -158,25 +163,42 @@ handleZ3 env@(Z3CEnv ctx solver functionCacheRef) = \case
   SolverGetModel k ->
     k <$> liftIO (Z3.solverGetModel ctx solver)
 
-  ReadFunctionCache func k -> do
-    cache <- liftIO (readIORef functionCacheRef)
+  ReadFunctionCache name k -> do
+    cache <-
+      foldlFramed HashMap.union HashMap.empty <$>
+        liftIO (readIORef functionCacheRef)
 
-    let
-      foldedCache =
-        foldlFramed HashMap.union HashMap.empty cache
-
-    case HashMap.lookup func foldedCache of
+    case HashMap.lookup name cache of
       Nothing ->
-        error $ "Undefined function: " ++ show func
+        error $ "Undefined function: " ++ unpack name
 
       Just decl ->
         pure (k decl)
 
-  WriteFunctionCache func decl k -> do
+  ReadVarCache var k -> do
+    cache <-
+      foldlFramed HashMap.union HashMap.empty <$>
+        liftIO (readIORef varCacheRef)
+
+    case HashMap.lookup var cache of
+      Nothing ->
+        error $ "Undefined var: " ++ show var
+
+      Just ast ->
+        pure (k ast)
+
+  WriteFunctionCache name decl k -> do
     liftIO
       (modifyIORef'
         functionCacheRef
-        (modifyFramed (HashMap.insert func decl)))
+        (modifyFramed (HashMap.insert name decl)))
+    pure k
+
+  WriteVarCache var ast k -> do
+    liftIO
+      (modifyIORef'
+        varCacheRef
+        (modifyFramed (HashMap.insert var ast)))
     pure k
 
   where
@@ -205,7 +227,10 @@ runZ3 action = do
   solver :: Z3.Solver <-
     liftIO (Z3.mkSolver ctx)
 
-  functionCache :: IORef (Framed (HashMap Function Z3.FuncDecl)) <-
+  functionCache :: IORef (Framed (HashMap Text Z3.FuncDecl)) <-
+    liftIO (newIORef (newFramed HashMap.empty))
+
+  varCache :: IORef (Framed (HashMap Text Z3.AST)) <-
     liftIO (newIORef (newFramed HashMap.empty))
 
   -- symbolCache :: IORef (HashMap Text Z3.Symbol) <-
@@ -215,5 +240,6 @@ runZ3 action = do
     { z3cContext = ctx
     , z3cSolver = solver
     , z3cFunctionCache = functionCache
+    , z3cVarCache = varCache
     -- , z3cSymbolCache = symbolCache
     }

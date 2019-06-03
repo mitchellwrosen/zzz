@@ -6,8 +6,10 @@ version: 0
 library
   build-depends:
     base ^>= 4.12,
+    bytestring ^>= 0.10,
     fused-effects ^>= 0.4,
     hashable,
+    sexp-grammar,
     text ^>= 1.2,
     unordered-containers ^>= 0.2,
     z3 ^>= 408.0,
@@ -26,6 +28,7 @@ library
     KindSignatures
     LambdaCase
     MultiParamTypeClasses
+    OverloadedStrings
     RankNTypes
     ScopedTypeVariables
     StandaloneDeriving
@@ -48,5 +51,6 @@ library
     Lit
     Sort
     Term
+    Var
     Z3
     Z3C
