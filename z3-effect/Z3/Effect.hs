@@ -1,5 +1,8 @@
+{-# LANGUAGE UndecidableInstances #-}
+
 module Z3.Effect
-  ( Z3(..)
+  ( -- * Effect
+    Z3(..)
   -- , Z3.Effect.addConstInterp
   -- , Z3.Effect.addFuncInterp
   -- , Z3.Effect.andThenTactic
@@ -240,17 +243,25 @@ module Z3.Effect
   -- , Z3.Effect.substituteVars
   -- , Z3.Effect.toApp
   -- , Z3.Effect.tryForTactic
+    -- * Carrier
+  , Z3C
+  , runZ3
+
     -- * Re-exports
   , Config
   , Context
+  , Solver
   , Symbol
+    -- TODO more re-exports
   ) where
 
 import Control.Effect
 import Control.Effect.Carrier
+import Control.Effect.Reader (ReaderC(..), runReader)
+import Control.Effect.Sum
+import Control.Monad.IO.Class (MonadIO(..))
 import Data.Kind (Type)
-import Data.Text (Text)
-import Z3.Base
+import Z3.Base as Z3
 
 
 data Z3 (m :: Type -> Type) (k :: Type)
@@ -279,12 +290,12 @@ data Z3 (m :: Type -> Type) (k :: Type)
   | MkOr [AST] (AST -> k)
   | MkParams (Params -> k)
   | MkSolver (Solver -> k)
-  | MkStringSymbol Text (Symbol -> k)
+  | MkStringSymbol String (Symbol -> k)
   | MkSub [AST] (AST -> k)
   | MkTrue (AST -> k)
   | MkUnaryMinus AST (AST -> k)
   | MkXor AST AST (AST -> k)
-  | ModelToString Model (Text -> k)
+  | ModelToString Model (String -> k)
   | ParamsSetBool Params Symbol Bool k
   | ParamsSetDouble Params Symbol Double k
   | ParamsSetSymbol Params Symbol Symbol k
@@ -371,7 +382,7 @@ mkOr = func1 MkOr
 mkParams :: (Carrier sig m, Member Z3 sig) => m Params
 mkParams = func0 MkParams
 
-mkStringSymbol :: (Carrier sig m, Member Z3 sig) => Text -> m Symbol
+mkStringSymbol :: (Carrier sig m, Member Z3 sig) => String -> m Symbol
 mkStringSymbol = func1 MkStringSymbol
 
 mkSub :: (Carrier sig m, Member Z3 sig) => [AST] -> m AST
@@ -386,7 +397,7 @@ mkUnaryMinus = func1 MkUnaryMinus
 mkXor :: (Carrier sig m, Member Z3 sig) => AST -> AST -> m AST
 mkXor = func2 MkXor
 
-modelToString :: (Carrier sig m, Member Z3 sig) => Model -> m Text
+modelToString :: (Carrier sig m, Member Z3 sig) => Model -> m String
 modelToString = func1 ModelToString
 
 paramsSetBool :: (Carrier sig m, Member Z3 sig) => Params -> Symbol -> Bool -> m ()
@@ -470,3 +481,128 @@ func3_ ::
   -> m ()
 func3_ f a b c =
   send (f a b c (pure ()))
+
+
+--------------------------------------------------------------------------------
+-- Carrier
+--------------------------------------------------------------------------------
+
+newtype Z3C (m :: Type -> Type) (a :: Type)
+  = Z3C { unZ3C :: ReaderC Env m a }
+  deriving newtype (Applicative, Functor, Monad, MonadIO)
+
+instance (Carrier sig m, MonadIO m) => Carrier (Z3 :+: sig) (Z3C m) where
+  eff :: (Z3 :+: sig) (Z3C m) (Z3C m a) -> Z3C m a
+  eff = \case
+    L z3 ->
+      Z3C (ReaderC (\env -> handleZ3 env z3 >>= runReader env . unZ3C))
+
+    R other ->
+      Z3C (eff (R (handleCoercible other)))
+
+handleZ3 :: MonadIO m => Env -> Z3 (Z3C m) x -> m x
+handleZ3 (Env ctx solver) = \case
+  AstToString       a     k -> wrap1 a            k  Z3.astToString
+  MkAdd             a     k -> wrap1 a            k  Z3.mkAdd
+  MkAnd             a     k -> wrap1 a            k  Z3.mkAnd
+  MkApp             a b   k -> wrap2 a b          k  Z3.mkApp
+  MkArraySort       a b   k -> wrap2 a b          k  Z3.mkArraySort
+  MkBoolSort              k -> wrap0              k  Z3.mkBoolSort
+  MkDistinct        a     k -> wrap1 a            k  Z3.mkDistinct
+  MkEq              a b   k -> wrap2 a b          k  Z3.mkEq
+  MkFalse                 k -> wrap0              k  Z3.mkFalse
+  MkFuncDecl        a b c k -> wrap3 a b c        k  Z3.mkFuncDecl
+  MkGe              a b   k -> wrap2 a b          k  Z3.mkGe
+  MkGt              a b   k -> wrap2 a b          k  Z3.mkGt
+  MkIff             a b   k -> wrap2 a b          k  Z3.mkIff
+  MkImplies         a b   k -> wrap2 a b          k  Z3.mkImplies
+  MkIntSort               k -> wrap0              k  Z3.mkIntSort
+  MkInteger         a     k -> wrap1 a            k  Z3.mkInteger
+  MkIntSymbol       a     k -> wrap1 a            k  Z3.mkIntSymbol
+  MkIte             a b c k -> wrap3 a b c        k  Z3.mkIte
+  MkLe              a b   k -> wrap2 a b          k  Z3.mkLe
+  MkLt              a b   k -> wrap2 a b          k  Z3.mkLt
+  MkMul             a     k -> wrap1 a            k  Z3.mkMul
+  MkNot             a     k -> wrap1 a            k  Z3.mkNot
+  MkOr              a     k -> wrap1 a            k  Z3.mkOr
+  MkParams                k -> wrap0              k  Z3.mkParams
+  MkSolver                k -> wrap0              k  Z3.mkSolver
+  MkStringSymbol    a     k -> wrap1 a            k  Z3.mkStringSymbol
+  MkSub             a     k -> wrap1 a            k  Z3.mkSub
+  MkTrue                  k -> wrap0              k  Z3.mkTrue
+  MkUnaryMinus      a     k -> wrap1 a            k  Z3.mkUnaryMinus
+  MkXor             a b   k -> wrap2 a b          k  Z3.mkXor
+  ModelToString     a     k -> wrap1 a            k  Z3.modelToString
+  ParamsSetBool     a b c k -> wrap3 a b c (const k) Z3.paramsSetBool
+  ParamsSetDouble   a b c k -> wrap3 a b c (const k) Z3.paramsSetDouble
+  ParamsSetSymbol   a b c k -> wrap3 a b c (const k) Z3.paramsSetSymbol
+  ParamsSetUInt     a b c k -> wrap3 a b c (const k) Z3.paramsSetUInt
+  ParamsToString    a     k -> wrap1 a            k  Z3.paramsToString
+  Simplify          a     k -> wrap1 a            k  Z3.simplify
+
+  SolverAssertCnstr a k -> wrap2 solver a (const k) Z3.solverAssertCnstr
+  SolverCheck         k -> wrap1 solver          k  Z3.solverCheck
+  SolverGetModel      k -> wrap1 solver          k  Z3.solverGetModel
+
+  where
+    wrap0 ::
+         MonadIO m
+      => (a -> b)
+      -> (Context -> IO a)
+      -> m b
+    wrap0 k f =
+      k <$> liftIO (f ctx)
+
+    wrap1 ::
+         MonadIO m
+      => a
+      -> (b -> c)
+      -> (Context -> a -> IO b)
+      -> m c
+    wrap1 a k f =
+      k <$> liftIO (f ctx a)
+
+    wrap2 ::
+         MonadIO m
+      => a
+      -> b
+      -> (c -> d)
+      -> (Context -> a -> b -> IO c)
+      -> m d
+    wrap2 a b k f =
+      k <$> liftIO (f ctx a b)
+
+    wrap3 ::
+         MonadIO m
+      => a
+      -> b
+      -> c
+      -> (d -> e)
+      -> (Context -> a -> b -> c -> IO d)
+      -> m e
+    wrap3 a b c k f =
+      k <$> liftIO (f ctx a b c)
+
+
+data Env
+  = Env
+  { envContext :: Context
+  , envSolver :: Solver
+  }
+
+
+runZ3 ::
+     MonadIO m
+  => Z3C m a
+  -> m a
+runZ3 action = do
+  ctx :: Context <-
+    liftIO (withConfig mkContext)
+
+  solver :: Solver <-
+    liftIO (mkSolver ctx)
+
+  runReaderC (unZ3C action) Env
+    { envContext = ctx
+    , envSolver = solver
+    }

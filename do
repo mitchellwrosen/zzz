@@ -1,22 +1,25 @@
 #!/bin/sh
 
 case "$1" in
-  "z3-effect")
+  "build")
+    cabal v2-build all
+    ;;
+  "dev")
     case "$2" in
-      "dev")
+      "z3-effect")
         ghcid -c "cabal v2-repl z3-effect" --restart z3-effect/z3-effect.cabal
         ;;
-      "repl")
-        cabal v2-repl z3-effect
+      "zzz")
+        ghcid -c "cabal v2-repl zzz" --restart zzz/zzz.cabal
         ;;
     esac
     ;;
-  "zzz")
+  "repl")
     case "$2" in
-      "dev")
-        ghcid -c "cabal v2-repl zzz" --restart zzz/zzz.cabal
+      "z3-effect")
+        cabal v2-repl z3-effect
         ;;
-      "repl")
+      "zzz")
         cabal v2-repl zzz
         ;;
     esac

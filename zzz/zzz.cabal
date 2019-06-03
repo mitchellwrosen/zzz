@@ -12,7 +12,9 @@ library
     sexp-grammar,
     text ^>= 1.2,
     unordered-containers ^>= 0.2,
+    -- TODO remove z3 dependency
     z3 ^>= 408.0,
+    z3-effect,
 
   default-extensions:
     BlockArguments
@@ -39,7 +41,7 @@ library
     Haskell2010
 
   exposed-modules:
-    Scrap
+    -- Scrap
     Zzz
 
   ghc-options:
@@ -52,5 +54,5 @@ library
     Sort
     Term
     Var
-    Z3
-    Z3C
+    Zzz.Carrier
+    Zzz.Effect
