@@ -7,23 +7,29 @@ library
   build-depends:
     base ^>= 4.12,
     fused-effects ^>= 0.4,
+    hashable,
     text ^>= 1.2,
     unordered-containers ^>= 0.2,
     z3 ^>= 408.0,
 
   default-extensions:
+    BlockArguments
     DeriveAnyClass
     DeriveFunctor
+    DeriveGeneric
     DerivingStrategies
     FlexibleContexts
     FlexibleInstances
-    GADTSyntax
+    GADTs
     GeneralizedNewtypeDeriving
     InstanceSigs
     KindSignatures
     LambdaCase
     MultiParamTypeClasses
+    RankNTypes
     ScopedTypeVariables
+    StandaloneDeriving
+    StrictData
     TypeOperators
 
   default-language:

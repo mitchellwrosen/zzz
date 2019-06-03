@@ -4,10 +4,12 @@ module Zzz
   ( Z3
   , Z3C
   , runZ3
-    -- * Variables
-  , mkBoolVar
-    -- * Expressions
-  , Expr
+    -- * Declarations
+  , declare
+  , declareFunction
+  , Function
+    -- * Terms
+  , Term
   , (=.)
   , false
   , true
@@ -19,12 +21,19 @@ module Zzz
   , implies
   , ite
   , distinct
-  , (+.)
-  , (-.)
-  , (*.)
   , Zzz.negate
+  , (<.)
+  , (<=.)
+  , (>.)
+  , (>=.)
+  , apply
+    -- * Sorts
+  , Sort
+  , boolSort
+  , intSort
     -- * Solver
   , assert
+  , frame
   , check
   , getModel
   , printModel
@@ -38,12 +47,15 @@ import Control.Effect.Reader (ReaderC(..), runReader)
 import Control.Effect.Sum
 import Control.Monad ((>=>))
 import Control.Monad.IO.Class (MonadIO(..))
-import Data.Foldable (for_, traverse_)
-import Data.IORef
+import Data.Foldable (traverse_)
+import Data.Hashable (Hashable)
 import Data.HashMap.Strict (HashMap)
+import Data.IORef
 import Data.Kind (Type)
+import Data.List (foldl')
 import Data.Text (Text, pack, unpack)
 import Data.Word
+import GHC.Generics (Generic)
 
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Text as Text
@@ -52,6 +64,11 @@ import qualified Z3.Base as Z3
 
 
 data Z3 (m :: Type -> Type) (k :: Type) where
+  Frame ::
+       m a
+    -> (a -> k)
+    -> Z3 m k
+
   MkAdd ::
        [Z3.AST]
     -> (Z3.AST -> k)
@@ -62,14 +79,14 @@ data Z3 (m :: Type -> Type) (k :: Type) where
     -> (Z3.AST -> k)
     -> Z3 m k
 
-  MkBoolSort ::
-       (Z3.Sort -> k)
+  MkApp ::
+       Z3.FuncDecl
+    -> [Z3.AST]
+    -> (Z3.AST -> k)
     -> Z3 m k
 
-  MkConst ::
-       Z3.Symbol
-    -> Z3.Sort
-    -> (Z3.AST -> k)
+  MkBoolSort ::
+       (Z3.Sort -> k)
     -> Z3 m k
 
   MkDistinct ::
@@ -87,6 +104,25 @@ data Z3 (m :: Type -> Type) (k :: Type) where
        (Z3.AST -> k)
     -> Z3 m k
 
+  MkFuncDecl ::
+       Z3.Symbol
+    -> [Z3.Sort]
+    -> Z3.Sort
+    -> (Z3.FuncDecl -> k)
+    -> Z3 m k
+
+  MkGe ::
+       Z3.AST
+    -> Z3.AST
+    -> (Z3.AST -> k)
+    -> Z3 m k
+
+  MkGt ::
+       Z3.AST
+    -> Z3.AST
+    -> (Z3.AST -> k)
+    -> Z3 m k
+
   MkIff ::
        Z3.AST
     -> Z3.AST
@@ -99,6 +135,15 @@ data Z3 (m :: Type -> Type) (k :: Type) where
     -> (Z3.AST -> k)
     -> Z3 m k
 
+  MkInteger ::
+       Integer
+    -> (Z3.AST -> k)
+    -> Z3 m k
+
+  MkIntSort ::
+       (Z3.Sort -> k)
+    -> Z3 m k
+
   MkIntSymbol ::
        Word32
     -> (Z3.Symbol -> k)
@@ -107,6 +152,18 @@ data Z3 (m :: Type -> Type) (k :: Type) where
   MkIte ::
        Z3.AST
     -> Z3.AST
+    -> Z3.AST
+    -> (Z3.AST -> k)
+    -> Z3 m k
+
+  MkLe ::
+       Z3.AST
+    -> Z3.AST
+    -> (Z3.AST -> k)
+    -> Z3 m k
+
+  MkLt ::
+       Z3.AST
     -> Z3.AST
     -> (Z3.AST -> k)
     -> Z3 m k
@@ -173,8 +230,57 @@ data Z3 (m :: Type -> Type) (k :: Type) where
        (Z3.Model -> k)
     -> Z3 m k
 
-  deriving stock (Functor)
-  deriving anyclass (HFunctor)
+  ReadFunctionCache ::
+       Function
+    -> (Z3.FuncDecl -> k)
+    -> Z3 m k
+
+  WriteFunctionCache ::
+       Function
+    -> Z3.FuncDecl
+    -> k
+    -> Z3 m k
+
+deriving instance Functor (Z3 m)
+
+instance HFunctor Z3 where
+  hmap :: (forall x. m x -> n x) -> Z3 m a -> Z3 n a
+  hmap f = \case
+    Frame a b -> Frame (f a) b
+    MkAdd a b -> MkAdd a b
+    MkAnd a b -> MkAnd a b
+    MkApp a b c -> MkApp a b c
+    MkBoolSort a -> MkBoolSort a
+    MkDistinct a b -> MkDistinct a b
+    MkEq a b c -> MkEq a b c
+    MkFalse a -> MkFalse a
+    MkFuncDecl a b c d -> MkFuncDecl a b c d
+    MkGe a b c -> MkGe a b c
+    MkGt a b c -> MkGt a b c
+    MkIff a b c -> MkIff a b c
+    MkImplies a b c -> MkImplies a b c
+    MkInteger a b -> MkInteger a b
+    MkIntSort a -> MkIntSort a
+    MkIntSymbol a b -> MkIntSymbol a b
+    MkIte a b c d -> MkIte a b c d
+    MkLe a b c -> MkLe a b c
+    MkLt a b c -> MkLt a b c
+    MkMul a b -> MkMul a b
+    MkNot a b -> MkNot a b
+    MkOr a b -> MkOr a b
+    MkSolver a -> MkSolver a
+    MkStringSymbol a b -> MkStringSymbol a b
+    MkSub a b -> MkSub a b
+    MkTrue a -> MkTrue a
+    MkUnaryMinus a b -> MkUnaryMinus a b
+    MkXor a b c -> MkXor a b c
+    ModelToString a b -> ModelToString a b
+    SolverAssertCnstr a b -> SolverAssertCnstr a b
+    SolverCheck a -> SolverCheck a
+    SolverGetModel a -> SolverGetModel a
+
+    ReadFunctionCache a b -> ReadFunctionCache a b
+    WriteFunctionCache a b c -> WriteFunctionCache a b c
 
 newtype Z3C (m :: Type -> Type) (a :: Type)
   = Z3C { unZ3C :: ReaderC Z3CEnv m a }
@@ -193,31 +299,59 @@ data Z3CEnv
   = Z3CEnv
   { z3cContext :: Z3.Context
   , z3cSolver :: Z3.Solver
-  , z3cSymbolCache :: IORef (HashMap Text Z3.Symbol)
+  -- , z3cSymbolCache :: IORef (HashMap Text Z3.Symbol)
+  , z3cFunctionCache :: IORef (Framed (HashMap Function Z3.FuncDecl))
   }
 
 handleZ3 :: MonadIO m => Z3CEnv -> Z3 (Z3C m) x -> m x
-handleZ3 (Z3CEnv ctx solver _symbolCache) = \case
+handleZ3 env@(Z3CEnv ctx solver functionCacheRef) = \case
+  Frame action k ->
+    let
+      inframe =
+        liftIO do
+          modifyIORef' functionCacheRef (pushFrame HashMap.empty)
+          Z3.solverPush ctx solver
+
+      outframe =
+        liftIO do
+          Z3.solverPop ctx solver 1
+          modifyIORef' functionCacheRef popFrame
+    in
+      inframe
+        *>
+      (k <$> runReader env (unZ3C action))
+        <*
+      outframe
+
   MkAdd as k ->
     vararg as k Z3.mkAdd
 
   MkAnd as k ->
     vararg as k Z3.mkAnd
 
+  MkApp decl args k ->
+    k <$> liftIO (Z3.mkApp ctx decl args)
+
   MkBoolSort k ->
     nullary k Z3.mkBoolSort
-
-  MkConst symbol sort k ->
-    k <$> liftIO (Z3.mkConst ctx symbol sort)
 
   MkDistinct as k ->
     vararg as k Z3.mkDistinct
 
-  MkEq e1 e2 k ->
-    binop e1 e2 k Z3.mkEq
+  MkEq a1 a2 k ->
+    binop a1 a2 k Z3.mkEq
 
   MkFalse k ->
     nullary k Z3.mkFalse
+
+  MkFuncDecl name args sort k ->
+    k <$> liftIO (Z3.mkFuncDecl ctx name args sort)
+
+  MkGe a1 a2 k ->
+    binop a1 a2 k Z3.mkGe
+
+  MkGt a1 a2 k ->
+    binop a1 a2 k Z3.mkGt
 
   MkIff a1 a2 k ->
     binop a1 a2 k Z3.mkIff
@@ -225,11 +359,23 @@ handleZ3 (Z3CEnv ctx solver _symbolCache) = \case
   MkImplies a1 a2 k ->
     binop a1 a2 k Z3.mkImplies
 
+  MkIntSort k ->
+    nullary k Z3.mkIntSort
+
+  MkInteger n k ->
+    k <$> liftIO (Z3.mkInteger ctx n)
+
   MkIntSymbol n k ->
     k <$> liftIO (Z3.mkIntSymbol ctx n)
 
-  MkIte e1 e2 e3 k ->
-    k <$> liftIO (Z3.mkIte ctx e1 e2 e3)
+  MkIte a1 a2 a3 k ->
+    k <$> liftIO (Z3.mkIte ctx a1 a2 a3)
+
+  MkLe a1 a2 k ->
+    binop a1 a2 k Z3.mkLe
+
+  MkLt a1 a2 k ->
+    binop a1 a2 k Z3.mkLt
 
   MkMul as k ->
     vararg as k Z3.mkMul
@@ -271,6 +417,27 @@ handleZ3 (Z3CEnv ctx solver _symbolCache) = \case
   SolverGetModel k ->
     k <$> liftIO (Z3.solverGetModel ctx solver)
 
+  ReadFunctionCache func k -> do
+    cache <- liftIO (readIORef functionCacheRef)
+
+    let
+      foldedCache =
+        foldlFramed HashMap.union HashMap.empty cache
+
+    case HashMap.lookup func foldedCache of
+      Nothing ->
+        error $ "Undefined function: " ++ show func
+
+      Just decl ->
+        pure (k decl)
+
+  WriteFunctionCache func decl k -> do
+    liftIO
+      (modifyIORef'
+        functionCacheRef
+        (modifyFramed (HashMap.insert func decl)))
+    pure k
+
   where
     unop a k f =
       k <$> liftIO (f ctx a)
@@ -278,6 +445,7 @@ handleZ3 (Z3CEnv ctx solver _symbolCache) = \case
     binop a1 a2 k f =
       k <$> liftIO (f ctx a1 a2)
 
+    nullary :: MonadIO m => (a -> b) -> (Z3.Context -> IO a) -> m b
     nullary k f =
       k <$> liftIO (f ctx)
 
@@ -287,66 +455,149 @@ handleZ3 (Z3CEnv ctx solver _symbolCache) = \case
 
 runZ3 ::
      MonadIO m
-  => [(Text, Text)] -- ^ Config
-  -> Z3C m a
+  => Z3C m a
   -> m a
-runZ3 params action = do
+runZ3 action = do
   ctx :: Z3.Context <-
-    liftIO $
-      Z3.withConfig $ \config -> do
-        for_ params $ \(k, v) ->
-          Z3.setParamValue config (unpack k) (unpack v)
-        Z3.mkContext config
+    liftIO (Z3.withConfig Z3.mkContext)
 
   solver :: Z3.Solver <-
     liftIO (Z3.mkSolver ctx)
 
-  symbolCache :: IORef (HashMap Text Z3.Symbol) <-
-    liftIO (newIORef HashMap.empty)
+  functionCache :: IORef (Framed (HashMap Function Z3.FuncDecl)) <-
+    liftIO (newIORef (newFramed HashMap.empty))
+
+  -- symbolCache :: IORef (HashMap Text Z3.Symbol) <-
+  --   liftIO (newIORef HashMap.empty)
 
   runReaderC (unZ3C action) Z3CEnv
     { z3cContext = ctx
     , z3cSolver = solver
-    , z3cSymbolCache = symbolCache
+    , z3cFunctionCache = functionCache
+    -- , z3cSymbolCache = symbolCache
     }
 
 
+data Framed a
+  = Framed a [a]
+
+newFramed :: a -> Framed a
+newFramed x =
+  Framed x []
+
+pushFrame :: a -> Framed a -> Framed a
+pushFrame y (Framed x xs) =
+  Framed x (y:xs)
+
+popFrame :: Framed a -> Framed a
+popFrame (Framed x xs) =
+  Framed x (drop 1 xs)
+
+foldlFramed :: (b -> a -> b) -> b -> Framed a -> b
+foldlFramed f z (Framed x xs) =
+  f (foldl' f z xs) x
+
+modifyFramed :: (a -> a) -> Framed a -> Framed a
+modifyFramed f = \case
+  Framed x [] -> Framed (f x) []
+  Framed x (y:ys) -> Framed x (f y : ys)
+
 --------------------------------------------------------------------------------
--- Expression
+-- Declarations
 -------------------------------------------------------------------------------
 
-data Expr
-  = Add [Expr]
-  | And [Expr]
-  | Distinct [Expr]
-  | Eq Expr Expr
-  | Iff Expr Expr
-  | Implies Expr Expr
-  | Ite Expr Expr Expr
-  | Lit Bool
-  | Negate Expr
-  | Mul [Expr]
-  | Or [Expr]
-  | Not Expr
-  | Sub [Expr]
-  | Var Z3.AST
-  | Xor Expr Expr
+data Function
+  = Function Text [Sort] Sort
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (Hashable)
+
+declare ::
+     ( Carrier sig m
+     , Member Z3 sig
+     )
+  => Text
+  -> Sort
+  -> m Term
+declare name sort = do
+  symbol <- mkStringSymbol name
+  sort' <- compileSort sort
+  decl <- mkFuncDecl symbol [] sort'
+  Var name <$> mkApp decl []
+
+declareFunction ::
+     ( Carrier sig m
+     , Member Z3 sig
+     )
+  => Text
+  -> [Sort]
+  -> Sort
+  -> m Function
+declareFunction name args sort = do
+  symbol <- mkStringSymbol name
+  args' <- traverse compileSort args
+  sort' <- compileSort sort
+  decl <- mkFuncDecl symbol args' sort'
+  let func = Function name args sort
+  writeFunctionCache func decl
+  pure func
+
+
+--------------------------------------------------------------------------------
+-- Terms
+-------------------------------------------------------------------------------
+
+data Term
+  = Add [Term]
+  | And [Term]
+  | Apply Function [Term]
+  | Distinct [Term]
+  | Eq Term Term
+  | Ge Term Term
+  | Gt Term Term
+  | Iff Term Term
+  | Implies Term Term
+  | Ite Term Term Term
+  | Lit Lit
+  | Le Term Term
+  | Lt Term Term
+  | Negate Term
+  | Mul [Term]
+  | Or [Term]
+  | Not Term
+  | Sub [Term]
+  | Var Text Z3.AST
+  | Xor Term Term
+
   -- div
   -- mod
   -- rem
-  -- lt
-  -- le
-  -- gt
-  -- ge
   -- int2real
   -- real2int
   -- isInt
+
+data Lit
+  = LitBool Bool
+  | LitInt Integer
+
+instance Num Term where
+  fromInteger =
+    Lit . LitInt
+
+  e1 + e2 =
+    Add [e1, e2]
+
+  e1 * e2 =
+    Mul [e1, e2]
+
+  e1 - e2 =
+    Sub [e1, e2]
+
 
 compile ::
      ( Carrier sig m
      , Member Z3 sig
      )
-  => Expr
+  => Term
   -> m Z3.AST
 compile = \case
   Add es ->
@@ -355,11 +606,22 @@ compile = \case
   And es ->
     vararg es mkAnd
 
+  Apply f es -> do
+    decl <- readFunctionCache f
+    as <- traverse compile es
+    mkApp decl as
+
   Distinct es ->
     vararg es mkDistinct
 
   Eq e1 e2 ->
     binop e1 e2 mkEq
+
+  Ge e1 e2 ->
+    binop e1 e2 mkGe
+
+  Gt e1 e2 ->
+    binop e1 e2 mkGt
 
   Iff e1 e2 ->
     binop e1 e2 mkIff
@@ -371,7 +633,13 @@ compile = \case
     trinop e1 e2 e3 mkIte
 
   Lit lit ->
-    if lit then mkTrue else mkFalse
+    compileLit lit
+
+  Le e1 e2 ->
+    binop e1 e2 mkLe
+
+  Lt e1 e2 ->
+    binop e1 e2 mkLt
 
   Negate e ->
     unop e mkUnaryMinus
@@ -388,7 +656,7 @@ compile = \case
   Sub es ->
     vararg es mkSub
 
-  Var var ->
+  Var _name var ->
     pure var
 
   Xor e1 e2 ->
@@ -412,73 +680,126 @@ compile = \case
     vararg es f =
       traverse compile es >>= f
 
+compileLit ::
+     ( Carrier sig m
+     , Member Z3 sig
+     )
+  => Lit
+  -> m Z3.AST
+compileLit = \case
+  LitBool b ->
+    if b then mkTrue else mkFalse
+
+  LitInt n ->
+    mkInteger n
+
 
 infix 4 =.
-(=.) :: Expr -> Expr -> Expr
+(=.) :: Term -> Term -> Term
 (=.) =
   Eq
 
 infixr 2 ||.
-(||.) :: Expr -> Expr -> Expr
+(||.) :: Term -> Term -> Term
 e1 ||. e2 =
   Or [e1, e2]
 
 infixr 3 &&.
-(&&.) :: Expr -> Expr -> Expr
+(&&.) :: Term -> Term -> Term
 e1 &&. e2 =
   And [e1, e2]
 
-infixl 6 +.
-(+.) :: Expr -> Expr -> Expr
-e1 +. e2 =
-  Add [e1, e2]
+infix 4 <.
+(<.) :: Term -> Term -> Term
+(<.) =
+  Lt
 
-infixl 6 -.
-(-.) :: Expr -> Expr -> Expr
-e1 -. e2 =
-  Sub [e1, e2]
+infix 4 <=.
+(<=.) :: Term -> Term -> Term
+(<=.) =
+  Le
 
-infixl 7 *.
-(*.) :: Expr -> Expr -> Expr
-e1 *. e2 =
-  Mul [e1, e2]
+infix 4 >.
+(>.) :: Term -> Term -> Term
+(>.) =
+  Gt
 
-false :: Expr
+infix 4 >=.
+(>=.) :: Term -> Term -> Term
+(>=.) =
+  Ge
+
+false :: Term
 false =
-  Lit False
+  Lit (LitBool False)
 
-true :: Expr
+true :: Term
 true =
-  Lit True
+  Lit (LitBool True)
 
-not :: Expr -> Expr
+not :: Term -> Term
 not =
   Not
 
-xor :: Expr -> Expr -> Expr
+xor :: Term -> Term -> Term
 xor =
   Xor
 
-iff :: Expr -> Expr -> Expr
+iff :: Term -> Term -> Term
 iff =
   Iff
 
-implies :: Expr -> Expr -> Expr
+implies :: Term -> Term -> Term
 implies =
   Implies
 
-ite :: Expr -> Expr -> Expr -> Expr
+ite :: Term -> Term -> Term -> Term
 ite =
   Ite
 
-distinct :: [Expr] -> Expr
+distinct :: [Term] -> Term
 distinct =
   Distinct
 
-negate :: Expr -> Expr
+negate :: Term -> Term
 negate =
   Negate
 
+apply :: Function -> [Term] -> Term
+apply =
+  Apply
+
+
+--------------------------------------------------------------------------------
+-- Sorts
+--------------------------------------------------------------------------------
+
+data Sort
+  = SortBool
+  | SortInt
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (Hashable)
+
+compileSort ::
+     ( Carrier sig m
+     , Member Z3 sig
+     )
+  => Sort
+  -> m Z3.Sort
+compileSort = \case
+  SortBool ->
+    mkBoolSort
+
+  SortInt ->
+    mkIntSort
+
+boolSort :: Sort
+boolSort =
+  SortBool
+
+intSort :: Sort
+intSort =
+  SortInt
 
 --------------------------------------------------------------------------------
 -- Solver
@@ -488,10 +809,19 @@ assert ::
      ( Carrier sig m
      , Member Z3 sig
      )
-  => Expr
+  => Term
   -> m ()
 assert =
   compile >=> solverAssertCnstr
+
+frame ::
+     ( Carrier sig m
+     , Member Z3 sig
+     )
+  => m a
+  -> m a
+frame action =
+  send (Frame action pure)
 
 check ::
      ( Carrier sig m
@@ -512,8 +842,9 @@ printModel model = do
   string <- modelToString model
   traverse_ (Text.putStrLn >>> liftIO) (Text.lines string)
 
+
 --------------------------------------------------------------------------------
--- Z3 API
+-- Effect smart constructors
 --------------------------------------------------------------------------------
 
 getModel ::
@@ -542,6 +873,16 @@ mkAnd ::
 mkAnd as =
   send (MkAnd as pure)
 
+mkApp ::
+     ( Carrier sig m
+     , Member Z3 sig
+     )
+  => Z3.FuncDecl
+  -> [Z3.AST]
+  -> m Z3.AST
+mkApp decl args =
+  send (MkApp decl args pure)
+
 mkBoolSort ::
      ( Carrier sig m
      , Member Z3 sig
@@ -549,27 +890,6 @@ mkBoolSort ::
   => m Z3.Sort
 mkBoolSort =
   send (MkBoolSort pure)
-
-mkBoolVar ::
-     ( Carrier sig m
-     , Member Z3 sig
-     )
-  => Text
-  -> m Expr
-mkBoolVar name = do
-  symbol <- mkStringSymbol name
-  sort <- mkBoolSort
-  Var <$> mkConst symbol sort
-
-mkConst ::
-     ( Carrier sig m
-     , Member Z3 sig
-     )
-  => Z3.Symbol
-  -> Z3.Sort
-  -> m Z3.AST
-mkConst symbol sort =
-  send (MkConst symbol sort pure)
 
 mkDistinct ::
      ( Carrier sig m
@@ -598,6 +918,37 @@ mkFalse ::
 mkFalse =
   send (MkFalse pure)
 
+mkFuncDecl ::
+     ( Carrier sig m
+     , Member Z3 sig
+     )
+  => Z3.Symbol
+  -> [Z3.Sort]
+  -> Z3.Sort
+  -> m Z3.FuncDecl
+mkFuncDecl symbol args sort =
+  send (MkFuncDecl symbol args sort pure)
+
+mkGe ::
+     ( Carrier sig m
+     , Member Z3 sig
+     )
+  => Z3.AST
+  -> Z3.AST
+  -> m Z3.AST
+mkGe a1 a2 =
+  send (MkGe a1 a2 pure)
+
+mkGt ::
+     ( Carrier sig m
+     , Member Z3 sig
+     )
+  => Z3.AST
+  -> Z3.AST
+  -> m Z3.AST
+mkGt a1 a2 =
+  send (MkGt a1 a2 pure)
+
 mkIff ::
      ( Carrier sig m
      , Member Z3 sig
@@ -618,14 +969,22 @@ mkImplies ::
 mkImplies a1 a2 =
   send (MkImplies a1 a2 pure)
 
-mkIntSymbol ::
+mkInteger ::
      ( Carrier sig m
      , Member Z3 sig
      )
-  => Word32
-  -> m Z3.Symbol
-mkIntSymbol n =
-  send (MkIntSymbol n pure)
+  => Integer
+  -> m Z3.AST
+mkInteger n =
+  send (MkInteger n pure)
+
+mkIntSort ::
+     ( Carrier sig m
+     , Member Z3 sig
+     )
+  => m Z3.Sort
+mkIntSort =
+  send (MkIntSort pure)
 
 mkIte ::
      ( Carrier sig m
@@ -637,6 +996,26 @@ mkIte ::
   -> m Z3.AST
 mkIte a1 a2 a3 =
   send (MkIte a1 a2 a3 pure)
+
+mkLe ::
+     ( Carrier sig m
+     , Member Z3 sig
+     )
+  => Z3.AST
+  -> Z3.AST
+  -> m Z3.AST
+mkLe a1 a2 =
+  send (MkLe a1 a2 pure)
+
+mkLt ::
+     ( Carrier sig m
+     , Member Z3 sig
+     )
+  => Z3.AST
+  -> Z3.AST
+  -> m Z3.AST
+mkLt a1 a2 =
+  send (MkLt a1 a2 pure)
 
 mkMul ::
      ( Carrier sig m
@@ -673,14 +1052,6 @@ mkStringSymbol ::
   -> m Z3.Symbol
 mkStringSymbol s =
   send (MkStringSymbol s pure)
-
-mkSolver ::
-     ( Carrier sig m
-     , Member Z3 sig
-     )
-  => m Z3.Solver
-mkSolver =
-  send (MkSolver pure)
 
 mkSub ::
      ( Carrier sig m
@@ -735,3 +1106,22 @@ solverAssertCnstr ::
   -> m ()
 solverAssertCnstr ast =
   send (SolverAssertCnstr ast (pure ()))
+
+readFunctionCache ::
+     ( Carrier sig m
+     , Member Z3 sig
+     )
+  => Function
+  -> m Z3.FuncDecl
+readFunctionCache func =
+  send (ReadFunctionCache func pure)
+
+writeFunctionCache ::
+     ( Carrier sig m
+     , Member Z3 sig
+     )
+  => Function
+  -> Z3.FuncDecl
+  -> m ()
+writeFunctionCache func decl =
+  send (WriteFunctionCache func decl (pure ()))
