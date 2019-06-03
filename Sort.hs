@@ -5,10 +5,15 @@ import GHC.Generics (Generic)
 
 
 data Sort
-  = SortBool
+  = SortArray Sort Sort
+  | SortBool
   | SortInt
   deriving stock (Eq, Generic, Show)
   deriving anyclass (Hashable)
+
+arraySort :: Sort -> Sort -> Sort
+arraySort =
+  SortArray
 
 boolSort :: Sort
 boolSort =

@@ -76,6 +76,9 @@ handleZ3 env@(Z3CEnv ctx solver functionCacheRef varCacheRef) = \case
   MkApp decl args k ->
     k <$> liftIO (Z3.mkApp ctx decl args)
 
+  MkArraySort s1 s2 k ->
+    k <$> liftIO (Z3.mkArraySort ctx s1 s2)
+
   MkBoolSort k ->
     nullary k Z3.mkBoolSort
 

@@ -121,6 +121,11 @@ compileSort ::
   => Sort
   -> m Z3.Base.Sort
 compileSort = \case
+  SortArray s1 s2 -> do
+    s1' <- compileSort s1
+    s2' <- compileSort s2
+    mkArraySort s1' s2'
+
   SortBool ->
     mkBoolSort
 
@@ -233,5 +238,7 @@ simplify ::
 simplify term = do
   ast <- compileTerm term
   ast' <- Z3.simplify ast
-  astToString ast' >>= liftIO . putStrLn
-  pure term
+  str <- astToString ast'
+  case parseTerm str of
+    Left err -> error ("parseTerm: " ++ err)
+    Right term' -> pure term'

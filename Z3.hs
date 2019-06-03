@@ -36,6 +36,12 @@ data Z3 (m :: Type -> Type) (k :: Type) where
     -> (Z3.AST -> k)
     -> Z3 m k
 
+  MkArraySort ::
+       Z3.Sort
+    -> Z3.Sort
+    -> (Z3.Sort -> k)
+    -> Z3 m k
+
   MkBoolSort ::
        (Z3.Sort -> k)
     -> Z3 m k
@@ -218,6 +224,7 @@ instance HFunctor Z3 where
     MkAdd a b -> MkAdd a b
     MkAnd a b -> MkAnd a b
     MkApp a b c -> MkApp a b c
+    MkArraySort a b c -> MkArraySort a b c
     MkBoolSort a -> MkBoolSort a
     MkDistinct a b -> MkDistinct a b
     MkEq a b c -> MkEq a b c
@@ -313,6 +320,16 @@ mkApp ::
   -> m Z3.AST
 mkApp decl args =
   send (MkApp decl args pure)
+
+mkArraySort ::
+     ( Carrier sig m
+     , Member Z3 sig
+     )
+  => Z3.Sort
+  -> Z3.Sort
+  -> m Z3.Sort
+mkArraySort s1 s2 =
+  send (MkArraySort s1 s2 pure)
 
 mkBoolSort ::
      ( Carrier sig m
