@@ -28,7 +28,6 @@ module Zzz
   , implies
   , ite
   , distinct
-  , Term.negate
   , (<.)
   , (<=.)
   , (>.)

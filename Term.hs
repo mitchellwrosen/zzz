@@ -47,8 +47,17 @@ data Term
   -- isInt
 
 instance Num Term where
+  abs e =
+    Ite (e >=. 0) e (negate e)
+
   fromInteger =
     Lit . LitInt
+
+  negate =
+    Negate
+
+  signum e =
+    Ite (Gt e 0) 1 0
 
   e1 + e2 =
     Add [e1, e2]
@@ -126,10 +135,6 @@ ite =
 distinct :: [Term] -> Term
 distinct =
   Distinct
-
-negate :: Term -> Term
-negate =
-  Negate
 
 apply :: Function -> [Term] -> Term
 apply =
