@@ -1,4 +1,4 @@
-module Sort
+module Zzz.Syntax.Sort
   ( Sort(..)
   , arraySort
   , boolSort

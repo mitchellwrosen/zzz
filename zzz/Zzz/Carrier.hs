@@ -1,33 +1,42 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module Zzz.Carrier where
+module Zzz.Carrier
+  ( ZzzC
+  , runZzz
+  ) where
 
-import Cache (Cache)
-import Framed (Framed)
-import Lit (Lit(..), compileLit)
-import Sort (Sort(..), compileSort)
-import Term (Term(..), compileTerm)
-import Var (Var(..))
+import Framed (Framed, modifyFramed)
 import Zzz.Effect (Zzz(..))
-import Zzz.FunctionCache (FunctionCache)
-import Zzz.VarCache (VarCache, writeVarCache)
+import Zzz.Syntax.Function (Function)
+import Zzz.Syntax.Lit (Lit(..), compileLit)
+import Zzz.Syntax.Sort (Sort(..), compileSort)
+import Zzz.Syntax.Term (Term, compileTerm)
+import Zzz.Syntax.Var (Var)
+
+import qualified Zzz.Syntax.Term as Term
+import qualified Zzz.Syntax.Var as Var
 
 import Control.Effect
 import Control.Effect.Carrier
+import Control.Effect.Reader
 import Control.Effect.Sum
 import Control.Monad ((>=>))
-import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.IO.Class (MonadIO(..))
+import Data.Function ((&))
 import Data.HashMap.Strict (HashMap)
 import Data.IORef
 import Data.Text (Text)
-import Z3.Effect (AST, FuncDecl, Z3, Z3C)
+import Z3.Effect (Z3, Z3C)
 
 import qualified Data.Text as Text
+import qualified Data.HashMap.Strict as HashMap
 import qualified Z3.Effect as Z3
 
 
+-- TODO symbol cache
+
 newtype ZzzC m a
-  = ZzzC { unZzzC :: ReaderC FunctionCache (ReaderC VarCache m) a }
+  = ZzzC { unZzzC :: ReaderC Env m a }
   deriving newtype (Applicative, Functor, Monad)
 
 instance
@@ -40,14 +49,25 @@ instance
   eff :: forall a. (Zzz :+: sig) (ZzzC m) (ZzzC m a) -> ZzzC m a
   eff = \case
     L (Assert term next) -> do
-      ZzzC (handleAssert term)
+      handleAssert term
       next
 
     L (Declare name sort next) ->
       ZzzC (handleDeclare name sort) >>= next
 
     R other ->
-      undefined
+      ZzzC (eff (R (handleCoercible other)))
+
+data Env
+  = Env
+  { envScopes :: IORef (Framed Scopes)
+  }
+
+data Scopes
+  = Scopes
+  { varScope :: HashMap Var Z3.AST
+  }
+
 
 runZzz ::
      MonadIO m
@@ -63,31 +83,38 @@ runZzz =
 
 handleAssert ::
      ( Carrier sig m
-     , Member (Reader FunctionCache) sig
-     , Member (Reader VarCache) sig
      , Member Z3 sig
      , MonadIO m
      )
   => Term
-  -> m ()
+  -> ZzzC m ()
 handleAssert =
   compileTerm >=> Z3.solverAssertCnstr
 
 handleDeclare ::
      ( Carrier sig m
-     , Member (Reader VarCache) sig
      , Member Z3 sig
      , MonadIO m
      )
   => Text
   -> Sort
-  -> m Term
+  -> ReaderC Env m Term
 handleDeclare name sort = do
   symbol <- Z3.mkStringSymbol (Text.unpack name)
   sort' <- compileSort sort
   decl <- Z3.mkFuncDecl symbol [] sort'
   ast <- Z3.mkApp decl []
-  writeVarCache name ast
+  let var = Var.Var name
+
+  do
+    let
+      f :: Scopes -> Scopes
+      f scopes =
+        scopes { varScope = HashMap.insert var ast (varScope scopes) }
+
+    Env scopesRef <- ask
+    liftIO (modifyIORef' scopesRef (modifyFramed f))
+
   pure (Term.Var (Var.Var name))
 
   -- Frame action k ->

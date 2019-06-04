@@ -1,4 +1,4 @@
-module Lit
+module Zzz.Syntax.Lit
   ( Lit(..)
   , litGrammar
   , compileLit
@@ -6,7 +6,6 @@ module Lit
 
 import Control.Effect
 import Language.SexpGrammar
-
 import Z3.Effect (AST, Z3)
 
 import qualified Z3.Effect as Z3

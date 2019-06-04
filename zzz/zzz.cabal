@@ -36,6 +36,7 @@ library
     StandaloneDeriving
     StrictData
     TypeOperators
+    ViewPatterns
 
   default-language:
     Haskell2010
@@ -48,14 +49,12 @@ library
     -Wall
 
   other-modules:
-    Cache
     Framed
-    Function
-    Lit
-    Sort
-    Term
-    Var
     Zzz.Carrier
     Zzz.Effect
-    Zzz.FunctionCache
-    Zzz.VarCache
+    Zzz.Syntax.Function
+    Zzz.Syntax.Lit
+    Zzz.Syntax.Sort
+    Zzz.Syntax.Term
+    Zzz.Syntax.Var
+    Zzz.Types

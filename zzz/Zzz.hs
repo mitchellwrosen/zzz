@@ -20,7 +20,7 @@ module Zzz
   , (=.)
   , false
   , true
-  , Term.not
+  , Zzz.Syntax.Term.not
   , (||.)
   , (&&.)
   , xor
@@ -39,11 +39,11 @@ module Zzz
   , intSort
   ) where
 
-import Function
-import Sort
-import Term
-import Zzz.Effect (Zzz, assert, declare)
 import Zzz.Carrier (ZzzC, runZzz)
+import Zzz.Effect (Zzz, assert, declare)
+import Zzz.Syntax.Function
+import Zzz.Syntax.Sort
+import Zzz.Syntax.Term
 
 import Control.Category ((>>>))
 import Control.Effect

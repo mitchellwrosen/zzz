@@ -1,4 +1,4 @@
-module Function
+module Zzz.Syntax.Function
   ( Function(..)
   ) where
 

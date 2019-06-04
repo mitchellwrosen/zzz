@@ -1,4 +1,4 @@
-module Term
+module Zzz.Syntax.Term
   ( Term(..)
   , (=.)
   , (||.)
@@ -13,7 +13,7 @@ module Term
   , iff
   , implies
   , ite
-  , Term.not
+  , Zzz.Syntax.Term.not
   , store
   , true
   , xor
@@ -24,79 +24,26 @@ module Term
   , compileTerm
   ) where
 
-import Function (Function(..))
-import Lit (Lit(..), compileLit)
-import Var (Var)
-import Zzz.FunctionCache (FunctionCache)
-import Zzz.VarCache (VarCache)
+import Zzz.Effect (Zzz, getFunction, getVar)
+import Zzz.Syntax.Function (Function(..))
+import Zzz.Syntax.Lit (Lit(..), compileLit)
+import Zzz.Syntax.Var (Var)
+import Zzz.Types (Term(..))
 
-import qualified Lit (litGrammar)
-import qualified Var (varGrammar)
+import qualified Zzz.Syntax.Lit as Lit (litGrammar)
+import qualified Zzz.Syntax.Var as Var (varGrammar)
 
 import Control.Effect
 import Data.List (foldl')
 import Data.Text (Text)
 import Language.SexpGrammar
-import Z3.Effect (AST, Z3)
+import Z3.Effect (Z3)
 
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Z3.Effect as Z3
 
-
-data Term
-  = Add [Term]
-  | And [Term]
-  | Apply Function [Term]
-  | Distinct [Term]
-  | Eq Term Term
-  | Ge Term Term
-  | Gt Term Term
-  | Iff Term Term
-  | Implies Term Term
-  | Ite Term Term Term
-  | Le Term Term
-  | Lit Lit
-  | Lt Term Term
-  | Negate Term
-  | Mul [Term]
-  | Or [Term]
-  | Not Term
-  | Store Term Term Term
-  | Sub [Term]
-  | Var Var
-  | Xor Term Term
-  deriving stock (Show)
-
-  -- div
-  -- mod
-  -- rem
-  -- int2real
-  -- real2int
-  -- isInt
-
-instance Num Term where
-  abs e =
-    Ite (e >=. 0) e (negate e)
-
-  fromInteger =
-    Lit . LitInt
-
-  negate =
-    Negate
-
-  signum e =
-    Ite (Gt e 0) 1 0
-
-  t1 + t2 =
-    Add [t1, t2]
-
-  t1 * t2 =
-    Mul [t1, t2]
-
-  t1 - t2 =
-    Sub [t1, t2]
 
 
 infix 4 =.
@@ -434,13 +381,13 @@ termGrammar =
         p
 
 compileTerm ::
+     forall m sig.
      ( Carrier sig m
-     , Member (Reader FunctionCache) sig
-     , Member (Reader VarCache) sig
      , Member Z3 sig
+     , Member Zzz sig
      )
   => Term
-  -> m AST
+  -> m Z3.AST
 compileTerm = \case
   Add ts ->
     wrapN ts Z3.mkAdd
@@ -449,10 +396,9 @@ compileTerm = \case
     wrapN ts Z3.mkAnd
 
   Apply f ts -> do
-    undefined
-    -- decl <- readFunctionCache (unFunction f)
-    -- as <- traverse compileTerm ts
-    -- Z3.mkApp decl as
+    decl <- getFunction f
+    as <- traverse compileTerm ts
+    Z3.mkApp decl as
 
   Distinct ts ->
     wrapN ts Z3.mkDistinct
@@ -499,27 +445,45 @@ compileTerm = \case
   Sub ts ->
     wrapN ts Z3.mkSub
 
-  Term.Var var ->
-    undefined
-    -- readVarCache (unVar var)
+  Var var ->
+    getVar var
 
   Xor t1 t2 ->
     wrap2 t1 t2 Z3.mkXor
 
   where
-    wrap1 e f =
-      compileTerm e >>= f
+    wrap1 ::
+         Term
+      -> (Z3.AST -> m a)
+      -> m a
+    wrap1 t f =
+      compileTerm t >>= f
 
+    wrap2 ::
+         Term
+      -> Term
+      -> (Z3.AST -> Z3.AST -> m a)
+      -> m a
     wrap2 t1 t2 f = do
       a1 <- compileTerm t1
       a2 <- compileTerm t2
       f a1 a2
 
+    wrap3 ::
+         Term
+      -> Term
+      -> Term
+      -> (Z3.AST -> Z3.AST -> Z3.AST -> m a)
+      -> m a
     wrap3 t1 t2 t3 f = do
       a1 <- compileTerm t1
       a2 <- compileTerm t2
       a3 <- compileTerm t3
       f a1 a2 a3
 
+    wrapN ::
+         [Term]
+      -> ([Z3.AST] -> m a)
+      -> m a
     wrapN ts f =
       traverse compileTerm ts >>= f
