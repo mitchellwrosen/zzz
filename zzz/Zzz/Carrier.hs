@@ -2,46 +2,52 @@
 
 module Zzz.Carrier where
 
+import Cache (Cache)
 import Framed (Framed)
-import Lit (Lit(..))
-import Term (Term(..))
+import Lit (Lit(..), compileLit)
+import Sort (Sort(..), compileSort)
+import Term (Term(..), compileTerm)
 import Var (Var(..))
 import Zzz.Effect (Zzz(..))
+import Zzz.FunctionCache (FunctionCache)
+import Zzz.VarCache (VarCache, writeVarCache)
 
 import Control.Effect
 import Control.Effect.Carrier
 import Control.Effect.Sum
+import Control.Monad ((>=>))
 import Control.Monad.IO.Class (MonadIO)
 import Data.HashMap.Strict (HashMap)
 import Data.IORef
 import Data.Text (Text)
-import Z3.Base (AST, FuncDecl)
-import Z3.Effect (Z3, Z3C)
+import Z3.Effect (AST, FuncDecl, Z3, Z3C)
 
+import qualified Data.Text as Text
 import qualified Z3.Effect as Z3
 
 
 newtype ZzzC m a
-  = ZzzC { unZzzC :: ReaderC Env m a }
+  = ZzzC { unZzzC :: ReaderC FunctionCache (ReaderC VarCache m) a }
   deriving newtype (Applicative, Functor, Monad)
 
 instance
      ( Carrier sig m
      , Member Z3 sig
+     , MonadIO m
      )
   => Carrier (Zzz :+: sig) (ZzzC m) where
 
-  eff :: (Zzz :+: sig) (ZzzC m) (ZzzC m a) -> ZzzC m a
+  eff :: forall a. (Zzz :+: sig) (ZzzC m) (ZzzC m a) -> ZzzC m a
   eff = \case
     L (Assert term next) -> do
-      handleAssert term
+      ZzzC (handleAssert term)
       next
+
+    L (Declare name sort next) ->
+      ZzzC (handleDeclare name sort) >>= next
 
     R other ->
       undefined
-
-data Env
-  = Env
 
 runZzz ::
      MonadIO m
@@ -57,12 +63,32 @@ runZzz =
 
 handleAssert ::
      ( Carrier sig m
+     , Member (Reader FunctionCache) sig
+     , Member (Reader VarCache) sig
      , Member Z3 sig
+     , MonadIO m
      )
   => Term
   -> m ()
 handleAssert =
-  undefined
+  compileTerm >=> Z3.solverAssertCnstr
+
+handleDeclare ::
+     ( Carrier sig m
+     , Member (Reader VarCache) sig
+     , Member Z3 sig
+     , MonadIO m
+     )
+  => Text
+  -> Sort
+  -> m Term
+handleDeclare name sort = do
+  symbol <- Z3.mkStringSymbol (Text.unpack name)
+  sort' <- compileSort sort
+  decl <- Z3.mkFuncDecl symbol [] sort'
+  ast <- Z3.mkApp decl []
+  writeVarCache name ast
+  pure (Term.Var (Var.Var name))
 
   -- Frame action k ->
   --   let
@@ -81,113 +107,3 @@ handleAssert =
   --     (k <$> runReader env (unZ3C action))
   --       <*
   --     outframe
-
-
-
---------------------------------------------------------------------------------
--- Helpers
---------------------------------------------------------------------------------
-
-compileLit ::
-     ( Carrier sig m
-     , Member Z3 sig
-     )
-  => Lit
-  -> m Z3.Base.AST
-
-compileLit = \case
-  LitBool b ->
-    if b then Z3.mkTrue else Z3.mkFalse
-
-  LitInt n ->
-    Z3.mkInteger n
-compileTerm ::
-     ( Carrier sig m
-     , Member (Reader (IORef (Framed (HashMap Text AST)))) sig
-     , Member (Reader (IORef (Framed (HashMap Text FuncDecl)))) sig
-     , Member Z3 sig
-     )
-  => Term
-  -> m AST
-compileTerm = \case
-  Add es ->
-    vararg es Z3.mkAdd
-
-  And es ->
-    vararg es Z3.mkAnd
-
-  Apply f es -> do
-    undefined
-    -- decl <- readFunctionCache (unFunction f)
-    -- as <- traverse compileTerm es
-    -- Z3.mkApp decl as
-
-  Distinct es ->
-    vararg es Z3.mkDistinct
-
-  Eq e1 e2 ->
-    binop e1 e2 Z3.mkEq
-
-  Ge e1 e2 ->
-    binop e1 e2 Z3.mkGe
-
-  Gt e1 e2 ->
-    binop e1 e2 Z3.mkGt
-
-  Iff e1 e2 ->
-    binop e1 e2 Z3.mkIff
-
-  Implies e1 e2 ->
-    binop e1 e2 Z3.mkImplies
-
-  Ite e1 e2 e3 ->
-    trinop e1 e2 e3 Z3.mkIte
-
-  Lit lit ->
-    compileLit lit
-
-  Le e1 e2 ->
-    binop e1 e2 Z3.mkLe
-
-  Lt e1 e2 ->
-    binop e1 e2 Z3.mkLt
-
-  Negate e ->
-    unop e Z3.mkUnaryMinus
-
-  Not e ->
-    unop e Z3.mkNot
-
-  Mul es ->
-    vararg es Z3.mkMul
-
-  Or es ->
-    vararg es Z3.mkOr
-
-  Sub es ->
-    vararg es Z3.mkSub
-
-  Term.Var var ->
-    undefined
-    -- readVarCache (unVar var)
-
-  Xor e1 e2 ->
-    binop e1 e2 Z3.mkXor
-
-  where
-    unop e f =
-      compileTerm e >>= f
-
-    binop e1 e2 f = do
-      a1 <- compileTerm e1
-      a2 <- compileTerm e2
-      f a1 a2
-
-    trinop e1 e2 e3 f = do
-      a1 <- compileTerm e1
-      a2 <- compileTerm e2
-      a3 <- compileTerm e3
-      f a1 a2 a3
-
-    vararg es f =
-      traverse compileTerm es >>= f

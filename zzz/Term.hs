@@ -1,19 +1,48 @@
-module Term where
+module Term
+  ( Term(..)
+  , (=.)
+  , (||.)
+  , (&&.)
+  , (<.)
+  , (<=.)
+  , (>.)
+  , (>=.)
+  , apply
+  , distinct
+  , false
+  , iff
+  , implies
+  , ite
+  , Term.not
+  , store
+  , true
+  , xor
+    -- * Parsing
+  , parseTerm
+  , termGrammar
+    -- * Compiling
+  , compileTerm
+  ) where
 
 import Function (Function(..))
-import Lit (Lit(..))
+import Lit (Lit(..), compileLit)
 import Var (Var)
+import Zzz.FunctionCache (FunctionCache)
+import Zzz.VarCache (VarCache)
 
 import qualified Lit (litGrammar)
 import qualified Var (varGrammar)
 
+import Control.Effect
 import Data.List (foldl')
 import Data.Text (Text)
 import Language.SexpGrammar
+import Z3.Effect (AST, Z3)
 
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
+import qualified Z3.Effect as Z3
 
 
 data Term
@@ -60,14 +89,14 @@ instance Num Term where
   signum e =
     Ite (Gt e 0) 1 0
 
-  e1 + e2 =
-    Add [e1, e2]
+  t1 + t2 =
+    Add [t1, t2]
 
-  e1 * e2 =
-    Mul [e1, e2]
+  t1 * t2 =
+    Mul [t1, t2]
 
-  e1 - e2 =
-    Sub [e1, e2]
+  t1 - t2 =
+    Sub [t1, t2]
 
 
 infix 4 =.
@@ -77,13 +106,13 @@ infix 4 =.
 
 infixr 2 ||.
 (||.) :: Term -> Term -> Term
-e1 ||. e2 =
-  Or [e1, e2]
+t1 ||. t2 =
+  Or [t1, t2]
 
 infixr 3 &&.
 (&&.) :: Term -> Term -> Term
-e1 &&. e2 =
-  And [e1, e2]
+t1 &&. t2 =
+  And [t1, t2]
 
 infix 4 <.
 (<.) :: Term -> Term -> Term
@@ -181,7 +210,7 @@ termGrammar =
         "and"
         And
         (\case
-          And es -> Right es
+          And ts -> Right ts
           _ -> Left (expected "And"))
 
     addGrammar :: Grammar Position (Sexp :- t) (Term :- t)
@@ -190,7 +219,7 @@ termGrammar =
         "+"
         Add
         (\case
-          Add es -> Right es
+          Add ts -> Right ts
           _ -> Left (expected "Add"))
 
     applyGrammar :: Grammar Position (Sexp :- t) (Term :- t)
@@ -200,7 +229,7 @@ termGrammar =
       partialIso
         (\(name, args) -> Apply (Function name) args)
         (\case
-          Apply f es -> Right (unFunction f, es)
+          Apply f ts -> Right (unFunction f, ts)
           _ -> Left (expected "Apply"))
 
     distinctGrammar :: Grammar Position (Sexp :- t) (Term :- t)
@@ -209,7 +238,7 @@ termGrammar =
         "distinct"
         Distinct
         (\case
-          Distinct es -> Right es
+          Distinct ts -> Right ts
           _ -> Left (expected "Distinct"))
 
     eqGrammar :: Grammar Position (Sexp :- t) (Term :- t)
@@ -218,7 +247,7 @@ termGrammar =
         "="
         Eq
         (\case
-          Eq e1 e2 -> Right [e1, e2]
+          Eq t1 t2 -> Right [t1, t2]
           _ -> Left (expected "Eq"))
 
     geGrammar :: Grammar Position (Sexp :- t) (Term :- t)
@@ -227,7 +256,7 @@ termGrammar =
         ">="
         Ge
         (\case
-          Ge e1 e2 -> Right (e1, e2)
+          Ge t1 t2 -> Right (t1, t2)
           _ -> Left (expected "Ge"))
 
     gtGrammar :: Grammar Position (Sexp :- t) (Term :- t)
@@ -236,7 +265,7 @@ termGrammar =
         ">"
         Gt
         (\case
-          Gt e1 e2 -> Right (e1, e2)
+          Gt t1 t2 -> Right (t1, t2)
           _ -> Left (expected "Gt"))
 
     impliesGrammar :: Grammar Position (Sexp :- t) (Term :- t)
@@ -249,7 +278,7 @@ termGrammar =
             s
             Implies
             (\case
-              Implies e1 e2 -> Right (e1, e2)
+              Implies t1 t2 -> Right (t1, t2)
               _ -> Left (expected "=> or implies"))
 
     iteGrammar :: Grammar Position (Sexp :- t) (Term :- t)
@@ -258,7 +287,7 @@ termGrammar =
         "ite"
         Ite
         (\case
-          Ite e1 e2 e3 -> Right (e1, (e2, e3))
+          Ite t1 t2 t3 -> Right (t1, (t2, t3))
           _ -> Left (expected "Ite"))
 
     leGrammar :: Grammar Position (Sexp :- t) (Term :- t)
@@ -267,7 +296,7 @@ termGrammar =
         "<="
         Le
         (\case
-          Le e1 e2 -> Right (e1, e2)
+          Le t1 t2 -> Right (t1, t2)
           _ -> Left (expected "Le"))
 
     litGrammar :: Grammar Position (Lit :- t) (Term :- t)
@@ -284,7 +313,7 @@ termGrammar =
         "<"
         Lt
         (\case
-          Lt e1 e2 -> Right (e1, e2)
+          Lt t1 t2 -> Right (t1, t2)
           _ -> Left (expected "Lt"))
 
     mulGrammar :: Grammar Position (Sexp :- t) (Term :- t)
@@ -293,7 +322,7 @@ termGrammar =
         "*"
         Mul
         (\case
-          Mul es -> Right es
+          Mul ts -> Right ts
           _ -> Left (expected "Mul"))
 
     notGrammar :: Grammar Position (Sexp :- t) (Term :- t)
@@ -311,7 +340,7 @@ termGrammar =
         "or"
         Or
         (\case
-          Or es -> Right es
+          Or ts -> Right ts
           _ -> Left (expected "Or"))
 
     storeGrammar :: Grammar Position (Sexp :- t) (Term :- t)
@@ -320,7 +349,7 @@ termGrammar =
         "store"
         Store
         (\case
-          Store e1 e2 e3 -> Right (e1, (e2, e3))
+          Store t1 t2 t3 -> Right (t1, (t2, t3))
           _ -> Left (expected "Store"))
 
     subGrammar :: Grammar Position (Sexp :- t) (Term :- t)
@@ -329,7 +358,7 @@ termGrammar =
         "-"
         Sub
         (\case
-          Sub es -> Right es
+          Sub ts -> Right ts
           _ -> Left (expected "Sub"))
 
     varGrammar :: Grammar Position (Var :- t) (Term :- t)
@@ -346,7 +375,7 @@ termGrammar =
         "xor"
         Xor
         (\case
-          Xor e1 e2 -> Right [e1, e2]
+          Xor t1 t2 -> Right [t1, t2]
           _ -> Left (expected "Xor"))
 
     unopGrammar ::
@@ -378,7 +407,7 @@ termGrammar =
       pair >>>
       pair >>>
       partialIso
-        (\(e1, (e2, e3)) -> f e1 e2 e3)
+        (\(t1, (t2, t3)) -> f t1 t2 t3)
         p
 
     varargGrammar ::
@@ -403,3 +432,94 @@ termGrammar =
           [_] -> error ("parseTerm: singleton " ++ Text.unpack s)
           x:xs -> foldl' f x xs)
         p
+
+compileTerm ::
+     ( Carrier sig m
+     , Member (Reader FunctionCache) sig
+     , Member (Reader VarCache) sig
+     , Member Z3 sig
+     )
+  => Term
+  -> m AST
+compileTerm = \case
+  Add ts ->
+    wrapN ts Z3.mkAdd
+
+  And ts ->
+    wrapN ts Z3.mkAnd
+
+  Apply f ts -> do
+    undefined
+    -- decl <- readFunctionCache (unFunction f)
+    -- as <- traverse compileTerm ts
+    -- Z3.mkApp decl as
+
+  Distinct ts ->
+    wrapN ts Z3.mkDistinct
+
+  Eq t1 t2 ->
+    wrap2 t1 t2 Z3.mkEq
+
+  Ge t1 t2 ->
+    wrap2 t1 t2 Z3.mkGe
+
+  Gt t1 t2 ->
+    wrap2 t1 t2 Z3.mkGt
+
+  Iff t1 t2 ->
+    wrap2 t1 t2 Z3.mkIff
+
+  Implies t1 t2 ->
+    wrap2 t1 t2 Z3.mkImplies
+
+  Ite t1 t2 t3 ->
+    wrap3 t1 t2 t3 Z3.mkIte
+
+  Lit lit ->
+    compileLit lit
+
+  Le t1 t2 ->
+    wrap2 t1 t2 Z3.mkLe
+
+  Lt t1 t2 ->
+    wrap2 t1 t2 Z3.mkLt
+
+  Negate t ->
+    wrap1 t Z3.mkUnaryMinus
+
+  Not t ->
+    wrap1 t Z3.mkNot
+
+  Mul ts ->
+    wrapN ts Z3.mkMul
+
+  Or ts ->
+    wrapN ts Z3.mkOr
+
+  Sub ts ->
+    wrapN ts Z3.mkSub
+
+  Term.Var var ->
+    undefined
+    -- readVarCache (unVar var)
+
+  Xor t1 t2 ->
+    wrap2 t1 t2 Z3.mkXor
+
+  where
+    wrap1 e f =
+      compileTerm e >>= f
+
+    wrap2 t1 t2 f = do
+      a1 <- compileTerm t1
+      a2 <- compileTerm t2
+      f a1 a2
+
+    wrap3 t1 t2 t3 f = do
+      a1 <- compileTerm t1
+      a2 <- compileTerm t2
+      a3 <- compileTerm t3
+      f a1 a2 a3
+
+    wrapN ts f =
+      traverse compileTerm ts >>= f

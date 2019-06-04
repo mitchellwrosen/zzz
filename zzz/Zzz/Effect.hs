@@ -1,14 +1,21 @@
-module Zzz.Effect where
+module Zzz.Effect
+  ( Zzz(..)
+  , assert
+  , declare
+  ) where
 
+import Sort (Sort)
 import Term (Term)
 
 import Control.Effect
 import Control.Effect.Carrier
 import Data.Kind (Type)
+import Data.Text (Text)
 
 
 data Zzz (m :: Type -> Type) (k :: Type)
   = Assert Term k
+  | Declare Text Sort (Term -> k)
   deriving stock (Functor)
   deriving anyclass (HFunctor)
 
@@ -21,20 +28,15 @@ assert ::
 assert term =
   send (Assert term (pure ()))
 
--- declare ::
---      ( Carrier sig m
---      , Member Z3 sig
---      )
---   => Text
---   -> Sort
---   -> m Term
--- declare name sort = do
---   symbol <- Z3.mkStringSymbol name
---   sort' <- compileSort sort
---   decl <- Z3.mkFuncDecl symbol [] sort'
---   ast <- Z3.mkApp decl []
---   writeVarCache name ast
---   pure (Term.Var (Var.Var name))
+declare ::
+     ( Carrier sig m
+     , Member Zzz sig
+     )
+  => Text
+  -> Sort
+  -> m Term
+declare name sort =
+  send (Declare name sort pure)
 
 -- declareFunction ::
 --      ( Carrier sig m
@@ -65,24 +67,6 @@ assert term =
 
 --   LitInt n ->
 --     Z3.mkInteger n
-
--- compileSort ::
---      ( Carrier sig m
---      , Member Z3 sig
---      )
---   => Sort
---   -> m Z3.Base.Sort
--- compileSort = \case
---   SortArray s1 s2 -> do
---     s1' <- compileSort s1
---     s2' <- compileSort s2
---     Z3.mkArraySort s1' s2'
-
---   SortBool ->
---     Z3.mkBoolSort
-
---   SortInt ->
---     Z3.mkIntSort
 
 -- compileTerm ::
 --      ( Carrier sig m

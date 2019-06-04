@@ -57,3 +57,5 @@ library
     Var
     Zzz.Carrier
     Zzz.Effect
+    Zzz.FunctionCache
+    Zzz.VarCache

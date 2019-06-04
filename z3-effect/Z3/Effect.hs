@@ -248,9 +248,14 @@ module Z3.Effect
   , runZ3
 
     -- * Re-exports
+  , AST
   , Config
   , Context
+  , FuncDecl
+  , Model
+  , Result(..)
   , Solver
+  , Sort
   , Symbol
     -- TODO more re-exports
   ) where
