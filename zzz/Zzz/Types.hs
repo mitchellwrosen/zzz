@@ -2,13 +2,13 @@
 
 module Zzz.Types where
 
+import Zzz.Prelude
 import Zzz.Syntax.Function (Function)
 import Zzz.Syntax.Lit (Lit(..))
 import Zzz.Syntax.Sort (Sort)
 import Zzz.Syntax.Var (Var)
 
 import Control.Effect.Carrier (HFunctor)
-import Data.Kind (Type)
 import Data.Text (Text)
 
 import qualified Z3.Effect as Z3

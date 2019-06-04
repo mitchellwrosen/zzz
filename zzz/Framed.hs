@@ -1,5 +1,7 @@
 module Framed where
 
+import Zzz.Prelude
+
 import Data.List (foldl')
 
 

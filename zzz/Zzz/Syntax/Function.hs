@@ -2,6 +2,8 @@ module Zzz.Syntax.Function
   ( Function(..)
   ) where
 
+import Zzz.Prelude
+
 import Data.Text (Text)
 
 

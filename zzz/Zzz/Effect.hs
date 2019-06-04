@@ -9,11 +9,11 @@ module Zzz.Effect
 import Zzz.Syntax.Function (Function)
 import Zzz.Syntax.Sort (Sort)
 import Zzz.Syntax.Var (Var)
+import Zzz.Prelude
 import Zzz.Types (Term, Zzz(..))
 
 import Control.Effect
 import Control.Effect.Carrier
-import Data.Kind (Type)
 import Data.Text (Text)
 
 import qualified Z3.Effect as Z3

@@ -30,6 +30,7 @@ library
     KindSignatures
     LambdaCase
     MultiParamTypeClasses
+    NoImplicitPrelude
     OverloadedStrings
     RankNTypes
     ScopedTypeVariables
@@ -52,6 +53,7 @@ library
     Framed
     Zzz.Carrier
     Zzz.Effect
+    Zzz.Prelude
     Zzz.Syntax.Function
     Zzz.Syntax.Lit
     Zzz.Syntax.Sort

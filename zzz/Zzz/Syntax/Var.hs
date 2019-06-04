@@ -3,9 +3,10 @@ module Zzz.Syntax.Var
   , varGrammar
   ) where
 
+import Zzz.Prelude
+
 import Data.Hashable (Hashable)
 import Data.Text (Text)
-
 import Language.SexpGrammar
 
 

@@ -4,6 +4,8 @@ module Zzz.Syntax.Lit
   , compileLit
   ) where
 
+import Zzz.Prelude
+
 import Control.Effect
 import Language.SexpGrammar
 import Z3.Effect (AST, Z3)

@@ -5,8 +5,9 @@ module Zzz.Carrier
   , runZzz
   ) where
 
-import Framed (Framed, modifyFramed)
+import Framed (Framed, modifyFramed, newFramed)
 import Zzz.Effect (Zzz(..))
+import Zzz.Prelude
 import Zzz.Syntax.Function (Function)
 import Zzz.Syntax.Lit (Lit(..), compileLit)
 import Zzz.Syntax.Sort (Sort(..), compileSort)
@@ -20,11 +21,8 @@ import Control.Effect
 import Control.Effect.Carrier
 import Control.Effect.Reader
 import Control.Effect.Sum
-import Control.Monad ((>=>))
 import Control.Monad.IO.Class (MonadIO(..))
-import Data.Function ((&))
 import Data.HashMap.Strict (HashMap)
-import Data.IORef
 import Data.Text (Text)
 import Z3.Effect (Z3, Z3C)
 
@@ -63,18 +61,29 @@ data Env
   { envScopes :: IORef (Framed Scopes)
   }
 
+newEnv :: MonadIO m => m Env
+newEnv =
+  Env
+    <$> liftIO (newIORef (newFramed emptyScopes))
+
 data Scopes
   = Scopes
-  { varScope :: HashMap Var Z3.AST
+  { funcScope :: HashMap Function Z3.FuncDecl
+  , varScope :: HashMap Var Z3.AST
   }
+
+emptyScopes :: Scopes
+emptyScopes =
+  Scopes HashMap.empty HashMap.empty
 
 
 runZzz ::
      MonadIO m
   => ZzzC (Z3C m) a
   -> m a
-runZzz =
-  undefined
+runZzz action = do
+  env <- newEnv
+  Z3.runZ3 (runReader env (unZzzC action))
 
 
 --------------------------------------------------------------------------------

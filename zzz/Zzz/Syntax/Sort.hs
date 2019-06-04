@@ -6,9 +6,10 @@ module Zzz.Syntax.Sort
   , compileSort
   ) where
 
+import Zzz.Prelude
+
 import Control.Effect
 import Data.Hashable (Hashable)
-import GHC.Generics (Generic)
 import Z3.Effect (Z3)
 
 import qualified Z3.Effect as Z3

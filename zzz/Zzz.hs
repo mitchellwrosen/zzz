@@ -41,14 +41,12 @@ module Zzz
 
 import Zzz.Carrier (ZzzC, runZzz)
 import Zzz.Effect (Zzz, assert, declare)
+import Zzz.Prelude
 import Zzz.Syntax.Function
 import Zzz.Syntax.Sort
 import Zzz.Syntax.Term
 
-import Control.Category ((>>>))
 import Control.Effect
-import Control.Monad.IO.Class (MonadIO(..))
-import Data.Foldable (traverse_)
 import Z3.Effect (Z3, Model, Result)
 
 import qualified Z3.Effect as Z3

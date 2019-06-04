@@ -25,6 +25,7 @@ module Zzz.Syntax.Term
   ) where
 
 import Zzz.Effect (Zzz, getFunction, getVar)
+import Zzz.Prelude
 import Zzz.Syntax.Function (Function(..))
 import Zzz.Syntax.Lit (Lit(..), compileLit)
 import Zzz.Syntax.Var (Var)
