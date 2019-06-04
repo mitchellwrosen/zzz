@@ -81,3 +81,20 @@ scrap = do
         check >>= liftIO . print
         declare "p" boolSort
     assert p
+
+    {-
+        (declare-const a (Array Int Int))
+        (declare-const x Int)
+        (declare-const y Int)
+        (simplify (+ x 2 x 1))
+        (simplify (* (+ x y) (+ x y)))
+        (simplify (= (store (store a 1 2) 4 3)
+                    (store (store a 4 3) 1 2)))
+        (help simplify)
+    -}
+    a <- declare "a" (arraySort intSort intSort)
+    x <- declare "x" intSort
+    y <- declare "y" intSort
+    simplify (x + 2 + x + 1) >>= liftIO . print
+    simplify ((x + y) * (x + y)) >>= liftIO . print
+    simplify (store (store a 1 2) 4 3 =. store (store a 4 3) 1 2) >>= liftIO . print

@@ -34,6 +34,7 @@ data Term
   | Mul [Term]
   | Or [Term]
   | Not Term
+  | Store Term Term Term
   | Sub [Term]
   | Var Var
   | Xor Term Term
@@ -140,6 +141,10 @@ apply :: Function -> [Term] -> Term
 apply =
   Apply
 
+store :: Term -> Term -> Term -> Term
+store =
+  Store
+
 parseTerm :: String -> Either String Term
 parseTerm =
   Text.pack >>>
@@ -149,11 +154,13 @@ parseTerm =
 
 termGrammar :: Grammar Position (Sexp :- t) (Term :- t)
 termGrammar =
-  andGrammar <>
   addGrammar <>
+  andGrammar <>
+  distinctGrammar <>
   eqGrammar <>
   geGrammar <>
   gtGrammar <>
+  impliesGrammar <>
   iteGrammar <>
   leGrammar <>
   (Lit.litGrammar >>> litGrammar) <>
@@ -161,6 +168,7 @@ termGrammar =
   mulGrammar <>
   notGrammar <>
   orGrammar <>
+  storeGrammar <>
   subGrammar <>
   xorGrammar <>
   (Var.varGrammar >>> varGrammar) <>
@@ -195,6 +203,15 @@ termGrammar =
           Apply f es -> Right (unFunction f, es)
           _ -> Left (expected "Apply"))
 
+    distinctGrammar :: Grammar Position (Sexp :- t) (Term :- t)
+    distinctGrammar =
+      varargGrammar
+        "distinct"
+        Distinct
+        (\case
+          Distinct es -> Right es
+          _ -> Left (expected "Distinct"))
+
     eqGrammar :: Grammar Position (Sexp :- t) (Term :- t)
     eqGrammar =
       varargGrammar'
@@ -222,13 +239,24 @@ termGrammar =
           Gt e1 e2 -> Right (e1, e2)
           _ -> Left (expected "Gt"))
 
+    impliesGrammar :: Grammar Position (Sexp :- t) (Term :- t)
+    impliesGrammar =
+      go "=>" <> go "implies"
+
+      where
+        go s =
+          binopGrammar
+            s
+            Implies
+            (\case
+              Implies e1 e2 -> Right (e1, e2)
+              _ -> Left (expected "=> or implies"))
+
     iteGrammar :: Grammar Position (Sexp :- t) (Term :- t)
     iteGrammar =
-      list (el (sym "ite") >>> el termGrammar >>> el termGrammar >>> el termGrammar) >>>
-      pair >>>
-      pair >>>
-      partialIso
-        (\(e1, (e2, e3)) -> Ite e1 e2 e3)
+      trinopGrammar
+        "ite"
+        Ite
         (\case
           Ite e1 e2 e3 -> Right (e1, (e2, e3))
           _ -> Left (expected "Ite"))
@@ -286,6 +314,15 @@ termGrammar =
           Or es -> Right es
           _ -> Left (expected "Or"))
 
+    storeGrammar :: Grammar Position (Sexp :- t) (Term :- t)
+    storeGrammar =
+      trinopGrammar
+        "store"
+        Store
+        (\case
+          Store e1 e2 e3 -> Right (e1, (e2, e3))
+          _ -> Left (expected "Store"))
+
     subGrammar :: Grammar Position (Sexp :- t) (Term :- t)
     subGrammar =
       varargGrammar
@@ -330,6 +367,19 @@ termGrammar =
       list (el (sym s) >>> el termGrammar >>> el termGrammar) >>>
       pair >>>
       partialIso (uncurry f) p
+
+    trinopGrammar ::
+         Text
+      -> (Term -> Term -> Term -> Term)
+      -> (Term -> Either Mismatch (Term, (Term, Term)))
+      -> Grammar Position (Sexp :- t) (Term :- t)
+    trinopGrammar s f p =
+      list (el (sym s) >>> el termGrammar >>> el termGrammar >>> el termGrammar) >>>
+      pair >>>
+      pair >>>
+      partialIso
+        (\(e1, (e2, e3)) -> f e1 e2 e3)
+        p
 
     varargGrammar ::
          Text

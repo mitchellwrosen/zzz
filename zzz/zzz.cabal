@@ -48,6 +48,7 @@ library
     -Wall
 
   other-modules:
+    Cache
     Framed
     Function
     Lit
