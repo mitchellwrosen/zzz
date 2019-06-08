@@ -3,47 +3,43 @@
 module Z3.Effect
   ( -- * Effect
     Z3(..)
-  -- , Z3.Effect.addConstInterp
-  -- , Z3.Effect.addFuncInterp
-  -- , Z3.Effect.andThenTactic
-  -- , Z3.Effect.appToAst
-  -- , Z3.Effect.applyTactic
+  , Z3.Effect.addConstInterp
+  , Z3.Effect.addFuncInterp
+  , Z3.Effect.andThenTactic
+  , Z3.Effect.appToAst
+  , Z3.Effect.applyTactic
   , Z3.Effect.astToString
-  -- , Z3.Effect.benchmarkToSMTLibString
-  -- , Z3.Effect.evalArray
-  -- , Z3.Effect.fixedpointAddRule
-  -- , Z3.Effect.fixedpointGetAnswer
-  -- , Z3.Effect.fixedpointGetAssertions
-  -- , Z3.Effect.fixedpointPop
-  -- , Z3.Effect.fixedpointPush
-  -- , Z3.Effect.fixedpointQueryRelations
-  -- , Z3.Effect.fixedpointRegisterRelation
-  -- , Z3.Effect.fixedpointSetParams
-  -- , Z3.Effect.funcDeclToString
-  -- , Z3.Effect.funcEntryGetArg
-  -- , Z3.Effect.funcEntryGetNumArgs
-  -- , Z3.Effect.funcEntryGetValue
-  -- , Z3.Effect.funcInterpGetArity
-  -- , Z3.Effect.funcInterpGetElse
-  -- , Z3.Effect.funcInterpGetEntry
-  -- , Z3.Effect.funcInterpGetNumEntries
-  -- , Z3.Effect.getAppArg
-  -- , Z3.Effect.getAppArgs
-  -- , Z3.Effect.getAppDecl
-  -- , Z3.Effect.getAppNumArgs
-  -- , Z3.Effect.getApplyResultNumSubgoals
-  -- , Z3.Effect.getApplyResultSubgoal
-  -- , Z3.Effect.getApplyResultSubgoals
-  -- , Z3.Effect.getArity
-  -- , Z3.Effect.getArraySortDomain
-  -- , Z3.Effect.getArraySortRange
-  -- , Z3.Effect.getAsArrayFuncDecl
-  -- , Z3.Effect.getAstKind
-  -- , Z3.Effect.getBoolValue
-  -- , Z3.Effect.getBvSortSize
-  -- , Z3.Effect.getConstDecl
-  -- , Z3.Effect.getConstInterp
-  -- , Z3.Effect.getConsts
+  , Z3.Effect.benchmarkToSMTLibString
+  , Z3.Effect.fixedpointAddRule
+  , Z3.Effect.fixedpointGetAnswer
+  , Z3.Effect.fixedpointGetAssertions
+  , Z3.Effect.fixedpointPop
+  , Z3.Effect.fixedpointPush
+  , Z3.Effect.fixedpointQueryRelations
+  , Z3.Effect.fixedpointRegisterRelation
+  , Z3.Effect.fixedpointSetParams
+  , Z3.Effect.funcDeclToString
+  , Z3.Effect.funcEntryGetArg
+  , Z3.Effect.funcEntryGetNumArgs
+  , Z3.Effect.funcEntryGetValue
+  , Z3.Effect.funcInterpGetArity
+  , Z3.Effect.funcInterpGetElse
+  , Z3.Effect.funcInterpGetEntry
+  , Z3.Effect.funcInterpGetNumEntries
+  , Z3.Effect.getAppArg
+  , Z3.Effect.getAppDecl
+  , Z3.Effect.getAppNumArgs
+  , Z3.Effect.getApplyResultNumSubgoals
+  , Z3.Effect.getApplyResultSubgoal
+  , Z3.Effect.getArity
+  , Z3.Effect.getArraySortDomain
+  , Z3.Effect.getArraySortRange
+  , Z3.Effect.getAsArrayFuncDecl
+  , Z3.Effect.getAstKind
+  , Z3.Effect.getBoolValue
+  , Z3.Effect.getBvSortSize
+  , Z3.Effect.getConstDecl
+  , Z3.Effect.getConstInterp
   -- , Z3.Effect.getDatatypeSortConstructorAccessors
   -- , Z3.Effect.getDatatypeSortConstructors
   -- , Z3.Effect.getDatatypeSortRecognizers
@@ -195,7 +191,7 @@ module Z3.Effect
   -- , Z3.Effect.mkSimpleSolver
   -- , Z3.Effect.mkSolver
   -- , Z3.Effect.mkSolverForLogic
-  -- , Z3.Effect.mkStore
+  , Z3.Effect.mkStore
   , Z3.Effect.mkStringSymbol
   , Z3.Effect.mkSub
   -- , Z3.Effect.mkTactic
@@ -248,29 +244,83 @@ module Z3.Effect
   , runZ3
 
     -- * Re-exports
+  , App
+  , ApplyResult
   , AST
-  , Config
+  , ASTKind(..)
+  , ASTPrintMode(..)
+  -- , Config
+  , Constructor
   , Context
+  , Fixedpoint(..)
   , FuncDecl
+  , FuncEntry
+  , FuncInterp
+  , Goal
+  , Logic(..)
   , Model
+  , Params
+  , Pattern
   , Result(..)
-  , Solver
+  -- , Solver
   , Sort
+  , SortKind(..)
   , Symbol
-    -- TODO more re-exports
+  , Tactic
+  , Version(..)
+  , Z3Error(..)
+  , Z3ErrorCode(..)
   ) where
 
 import Control.Effect
 import Control.Effect.Carrier
+import Control.Effect.Error
 import Control.Effect.Reader (ReaderC(..), runReader)
 import Control.Effect.Sum
+import Control.Exception (try)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Kind (Type)
 import Z3.Base as Z3
 
 
 data Z3 (m :: Type -> Type) (k :: Type)
-  = AstToString AST (String -> k)
+  = AddConstInterp Model FuncDecl AST k
+  | AddFuncInterp Model FuncDecl AST (FuncInterp -> k)
+  | AndThenTactic Tactic Tactic (Tactic -> k)
+  | AppToAst App (AST -> k)
+  | ApplyTactic Tactic Goal (ApplyResult -> k)
+  | AstToString AST (String -> k)
+  | BenchmarkToSMTLibString String String String String [AST] AST (String -> k)
+  | FixedpointAddRule Fixedpoint AST Symbol k
+  | FixedpointGetAnswer Fixedpoint (AST -> k)
+  | FixedpointGetAssertions Fixedpoint ([AST] -> k)
+  | FixedpointPop Fixedpoint k
+  | FixedpointPush Fixedpoint k
+  | FixedpointQueryRelations Fixedpoint [FuncDecl] (Result -> k)
+  | FixedpointRegisterRelation Fixedpoint FuncDecl k
+  | FixedpointSetParams Fixedpoint Params k
+  | FuncDeclToString FuncDecl (String -> k)
+  | FuncEntryGetArg FuncEntry Int (AST -> k)
+  | FuncEntryGetNumArgs FuncEntry (Int -> k)
+  | FuncEntryGetValue FuncEntry (AST -> k)
+  | FuncInterpGetArity FuncInterp (Int -> k)
+  | FuncInterpGetElse FuncInterp (AST -> k)
+  | FuncInterpGetEntry FuncInterp Int (FuncEntry -> k)
+  | FuncInterpGetNumEntries FuncInterp (Int -> k)
+  | GetAppArg App Int (AST -> k)
+  | GetAppDecl App (FuncDecl -> k)
+  | GetAppNumArgs App (Int -> k)
+  | GetApplyResultNumSubgoals ApplyResult (Int -> k)
+  | GetApplyResultSubgoal ApplyResult Int (Goal -> k)
+  | GetArity FuncDecl (Int -> k)
+  | GetArraySortDomain Sort (Sort -> k)
+  | GetArraySortRange Sort (Sort -> k)
+  | GetAsArrayFuncDecl AST (FuncDecl -> k)
+  | GetAstKind AST (ASTKind -> k)
+  | GetBoolValue AST (Maybe Bool -> k)
+  | GetBvSortSize Sort (Int -> k)
+  | GetConstDecl Model Word (FuncDecl -> k)
+  | GetConstInterp Model FuncDecl (Maybe AST -> k)
   | MkAdd [AST] (AST -> k)
   | MkAnd [AST] (AST -> k)
   | MkApp FuncDecl [AST] (AST -> k)
@@ -295,6 +345,7 @@ data Z3 (m :: Type -> Type) (k :: Type)
   | MkOr [AST] (AST -> k)
   | MkParams (Params -> k)
   | MkSolver (Solver -> k)
+  | MkStore AST AST AST (AST -> k)
   | MkStringSymbol String (Symbol -> k)
   | MkSub [AST] (AST -> k)
   | MkTrue (AST -> k)
@@ -315,8 +366,116 @@ data Z3 (m :: Type -> Type) (k :: Type)
 deriving stock instance Functor (Z3 m)
 
 
+addConstInterp :: (Carrier sig m, Member Z3 sig) => Model -> FuncDecl -> AST -> m ()
+addConstInterp = func3_ AddConstInterp
+
+addFuncInterp :: (Carrier sig m, Member Z3 sig) => Model -> FuncDecl -> AST -> m FuncInterp
+addFuncInterp = func3 AddFuncInterp
+
+andThenTactic :: (Carrier sig m, Member Z3 sig) => Tactic -> Tactic -> m Tactic
+andThenTactic = func2 AndThenTactic
+
+appToAst :: (Carrier sig m, Member Z3 sig) => App -> m AST
+appToAst = func1 AppToAst
+
+applyTactic :: (Carrier sig m, Member Z3 sig) => Tactic -> Goal -> m ApplyResult
+applyTactic = func2 ApplyTactic
+
 astToString :: (Carrier sig m, Member Z3 sig) => AST -> m String
 astToString = func1 AstToString
+
+benchmarkToSMTLibString :: (Carrier sig m, Member Z3 sig) => String -> String -> String -> String -> [AST] -> AST -> m String
+benchmarkToSMTLibString = func6 BenchmarkToSMTLibString
+
+fixedpointAddRule :: (Carrier sig m, Member Z3 sig) => Fixedpoint -> AST -> Symbol -> m ()
+fixedpointAddRule = func3_ FixedpointAddRule
+
+fixedpointGetAnswer :: (Carrier sig m, Member Z3 sig) => Fixedpoint -> m AST
+fixedpointGetAnswer = func1 FixedpointGetAnswer
+
+fixedpointGetAssertions :: (Carrier sig m, Member Z3 sig) => Fixedpoint -> m [AST]
+fixedpointGetAssertions = func1 FixedpointGetAssertions
+
+fixedpointPop :: (Carrier sig m, Member Z3 sig) => Fixedpoint -> m ()
+fixedpointPop = func1_ FixedpointPop
+
+fixedpointPush :: (Carrier sig m, Member Z3 sig) => Fixedpoint -> m ()
+fixedpointPush = func1_ FixedpointPush
+
+fixedpointQueryRelations :: (Carrier sig m, Member Z3 sig) => Fixedpoint -> [FuncDecl] -> m Result
+fixedpointQueryRelations = func2 FixedpointQueryRelations
+
+fixedpointRegisterRelation :: (Carrier sig m, Member Z3 sig) => Fixedpoint -> FuncDecl -> m ()
+fixedpointRegisterRelation = func2_ FixedpointRegisterRelation
+
+fixedpointSetParams :: (Carrier sig m, Member Z3 sig) => Fixedpoint -> Params -> m ()
+fixedpointSetParams = func2_ FixedpointSetParams
+
+funcDeclToString :: (Carrier sig m, Member Z3 sig) => FuncDecl -> m String
+funcDeclToString = func1 FuncDeclToString
+
+funcEntryGetArg :: (Carrier sig m, Member Z3 sig) => FuncEntry -> Int -> m AST
+funcEntryGetArg = func2 FuncEntryGetArg
+
+funcEntryGetNumArgs :: (Carrier sig m, Member Z3 sig) => FuncEntry -> m Int
+funcEntryGetNumArgs = func1 FuncEntryGetNumArgs
+
+funcEntryGetValue :: (Carrier sig m, Member Z3 sig) => FuncEntry -> m AST
+funcEntryGetValue = func1 FuncEntryGetValue
+
+funcInterpGetArity :: (Carrier sig m, Member Z3 sig) => FuncInterp -> m Int
+funcInterpGetArity = func1 FuncInterpGetArity
+
+funcInterpGetElse :: (Carrier sig m, Member Z3 sig) => FuncInterp -> m AST
+funcInterpGetElse = func1 FuncInterpGetElse
+
+funcInterpGetEntry :: (Carrier sig m, Member Z3 sig) => FuncInterp -> Int -> m FuncEntry
+funcInterpGetEntry = func2 FuncInterpGetEntry
+
+funcInterpGetNumEntries :: (Carrier sig m, Member Z3 sig) => FuncInterp -> m Int
+funcInterpGetNumEntries = func1 FuncInterpGetNumEntries
+
+getAppArg :: (Carrier sig m, Member Z3 sig) => App -> Int -> m AST
+getAppArg = func2 GetAppArg
+
+getAppDecl :: (Carrier sig m, Member Z3 sig) => App -> m FuncDecl
+getAppDecl = func1 GetAppDecl
+
+getAppNumArgs :: (Carrier sig m, Member Z3 sig) => App -> m Int
+getAppNumArgs = func1 GetAppNumArgs
+
+getApplyResultNumSubgoals :: (Carrier sig m, Member Z3 sig) => ApplyResult -> m Int
+getApplyResultNumSubgoals = func1 GetApplyResultNumSubgoals
+
+getApplyResultSubgoal :: (Carrier sig m, Member Z3 sig) => ApplyResult -> Int -> m Goal
+getApplyResultSubgoal = func2 GetApplyResultSubgoal
+
+getArity :: (Carrier sig m, Member Z3 sig) => FuncDecl -> m Int
+getArity = func1 GetArity
+
+getArraySortDomain :: (Carrier sig m, Member Z3 sig) => Sort -> m Sort
+getArraySortDomain = func1 GetArraySortDomain
+
+getArraySortRange :: (Carrier sig m, Member Z3 sig) => Sort -> m Sort
+getArraySortRange = func1 GetArraySortRange
+
+getAsArrayFuncDecl :: (Carrier sig m, Member Z3 sig) => AST -> m FuncDecl
+getAsArrayFuncDecl = func1 GetAsArrayFuncDecl
+
+getAstKind :: (Carrier sig m, Member Z3 sig) => AST -> m ASTKind
+getAstKind = func1 GetAstKind
+
+getBoolValue :: (Carrier sig m, Member Z3 sig) => AST -> m (Maybe Bool)
+getBoolValue = func1 GetBoolValue
+
+getBvSortSize :: (Carrier sig m, Member Z3 sig) => Sort -> m Int
+getBvSortSize = func1 GetBvSortSize
+
+getConstDecl :: (Carrier sig m, Member Z3 sig) => Model -> Word -> m FuncDecl
+getConstDecl = func2 GetConstDecl
+
+getConstInterp :: (Carrier sig m, Member Z3 sig) => Model -> FuncDecl -> m (Maybe AST)
+getConstInterp = func2 GetConstInterp
 
 mkAdd :: (Carrier sig m, Member Z3 sig) => [AST] -> m AST
 mkAdd = func1 MkAdd
@@ -387,6 +546,9 @@ mkOr = func1 MkOr
 mkParams :: (Carrier sig m, Member Z3 sig) => m Params
 mkParams = func0 MkParams
 
+mkStore :: (Carrier sig m, Member Z3 sig) => AST -> AST -> AST -> m AST
+mkStore = func3 MkStore
+
 mkStringSymbol :: (Carrier sig m, Member Z3 sig) => String -> m Symbol
 mkStringSymbol = func1 MkStringSymbol
 
@@ -435,57 +597,26 @@ solverGetModel = func0 SolverGetModel
 
 --------------------------------------------------------------------------------
 
-func0 ::
-     (Carrier sig m, Member Z3 sig)
-  => ((a -> m a) -> Z3 m (m a))
-  -> m a
-func0 f =
-  send (f pure)
 
-func1 ::
-     (Carrier sig m, Member Z3 sig)
-  => (a -> (b -> m b) -> Z3 m (m b))
-  -> a
-  -> m b
-func1 f a =
-  send (f a pure)
+func0 :: (Carrier sig m, Member Z3 sig) => ((a -> m a) -> Z3 m (m a)) -> m a
+func1 :: (Carrier sig m, Member Z3 sig) => (a -> (b -> m b) -> Z3 m (m b)) -> a -> m b
+func2 :: (Carrier sig m, Member Z3 sig) => (a -> b -> (c -> m c) -> Z3 m (m c)) -> a -> b -> m c
+func3 :: (Carrier sig m, Member Z3 sig) => (a -> b -> c -> (d -> m d) -> Z3 m (m d)) -> a -> b -> c -> m d
+func6 :: (Carrier sig m, Member Z3 sig) => (a -> b -> c -> d -> e -> f -> (g -> m g) -> Z3 m (m g)) -> a -> b -> c -> d -> e -> f -> m g
 
-func2 ::
-     (Carrier sig m, Member Z3 sig)
-  => (a -> b -> (c -> m c) -> Z3 m (m c))
-  -> a
-  -> b
-  -> m c
-func2 f a b =
-  send (f a b pure)
+func1_ :: (Carrier sig m, Member Z3 sig) => (a -> m () -> Z3 m (m ())) -> a -> m ()
+func2_ :: (Carrier sig m, Member Z3 sig) => (a -> b -> m () -> Z3 m (m ())) -> a -> b -> m ()
+func3_ :: (Carrier sig m, Member Z3 sig) => (a -> b -> c -> m () -> Z3 m (m ())) -> a -> b -> c -> m ()
 
-func3 ::
-     (Carrier sig m, Member Z3 sig)
-  => (a -> b -> c -> (d -> m d) -> Z3 m (m d))
-  -> a
-  -> b
-  -> c
-  -> m d
-func3 f a b c =
-  send (f a b c pure)
+func0 f             = send (f             pure)
+func1 f a           = send (f a           pure)
+func2 f a b         = send (f a b         pure)
+func3 f a b c       = send (f a b c       pure)
+func6 f a b c d e g = send (f a b c d e g pure)
 
-func1_ ::
-     (Carrier sig m, Member Z3 sig)
-  => (a -> m () -> Z3 m (m ()))
-  -> a
-  -> m ()
-func1_ f a =
-  send (f a (pure ()))
-
-func3_ ::
-     (Carrier sig m, Member Z3 sig)
-  => (a -> b -> c -> m () -> Z3 m (m ()))
-  -> a
-  -> b
-  -> c
-  -> m ()
-func3_ f a b c =
-  send (f a b c (pure ()))
+func1_ f a     = send (f a     (pure ()))
+func2_ f a b   = send (f a b   (pure ()))
+func3_ f a b c = send (f a b c (pure ()))
 
 
 --------------------------------------------------------------------------------
@@ -496,7 +627,11 @@ newtype Z3C (m :: Type -> Type) (a :: Type)
   = Z3C { unZ3C :: ReaderC Env m a }
   deriving newtype (Applicative, Functor, Monad, MonadIO)
 
-instance (Carrier sig m, MonadIO m) => Carrier (Z3 :+: sig) (Z3C m) where
+instance
+     ( Carrier sig m
+     , Member (Error Z3Error) sig
+     , MonadIO m
+     ) => Carrier (Z3 :+: sig) (Z3C m) where
   eff :: (Z3 :+: sig) (Z3C m) (Z3C m a) -> Z3C m a
   eff = \case
     L z3 ->
@@ -505,89 +640,121 @@ instance (Carrier sig m, MonadIO m) => Carrier (Z3 :+: sig) (Z3C m) where
     R other ->
       Z3C (eff (R (handleCoercible other)))
 
-handleZ3 :: MonadIO m => Env -> Z3 (Z3C m) x -> m x
+handleZ3 ::
+     ( Carrier sig m
+     , Member (Error Z3Error) sig
+     , MonadIO m
+     )
+  => Env
+  -> Z3 (Z3C m) a
+  -> m a
 handleZ3 (Env ctx solver) = \case
-  AstToString       a     k -> wrap1 a            k  Z3.astToString
-  MkAdd             a     k -> wrap1 a            k  Z3.mkAdd
-  MkAnd             a     k -> wrap1 a            k  Z3.mkAnd
-  MkApp             a b   k -> wrap2 a b          k  Z3.mkApp
-  MkArraySort       a b   k -> wrap2 a b          k  Z3.mkArraySort
-  MkBoolSort              k -> wrap0              k  Z3.mkBoolSort
-  MkDistinct        a     k -> wrap1 a            k  Z3.mkDistinct
-  MkEq              a b   k -> wrap2 a b          k  Z3.mkEq
-  MkFalse                 k -> wrap0              k  Z3.mkFalse
-  MkFuncDecl        a b c k -> wrap3 a b c        k  Z3.mkFuncDecl
-  MkGe              a b   k -> wrap2 a b          k  Z3.mkGe
-  MkGt              a b   k -> wrap2 a b          k  Z3.mkGt
-  MkIff             a b   k -> wrap2 a b          k  Z3.mkIff
-  MkImplies         a b   k -> wrap2 a b          k  Z3.mkImplies
-  MkIntSort               k -> wrap0              k  Z3.mkIntSort
-  MkInteger         a     k -> wrap1 a            k  Z3.mkInteger
-  MkIntSymbol       a     k -> wrap1 a            k  Z3.mkIntSymbol
-  MkIte             a b c k -> wrap3 a b c        k  Z3.mkIte
-  MkLe              a b   k -> wrap2 a b          k  Z3.mkLe
-  MkLt              a b   k -> wrap2 a b          k  Z3.mkLt
-  MkMul             a     k -> wrap1 a            k  Z3.mkMul
-  MkNot             a     k -> wrap1 a            k  Z3.mkNot
-  MkOr              a     k -> wrap1 a            k  Z3.mkOr
-  MkParams                k -> wrap0              k  Z3.mkParams
-  MkSolver                k -> wrap0              k  Z3.mkSolver
-  MkStringSymbol    a     k -> wrap1 a            k  Z3.mkStringSymbol
-  MkSub             a     k -> wrap1 a            k  Z3.mkSub
-  MkTrue                  k -> wrap0              k  Z3.mkTrue
-  MkUnaryMinus      a     k -> wrap1 a            k  Z3.mkUnaryMinus
-  MkXor             a b   k -> wrap2 a b          k  Z3.mkXor
-  ModelToString     a     k -> wrap1 a            k  Z3.modelToString
-  ParamsSetBool     a b c k -> wrap3 a b c (const k) Z3.paramsSetBool
-  ParamsSetDouble   a b c k -> wrap3 a b c (const k) Z3.paramsSetDouble
-  ParamsSetSymbol   a b c k -> wrap3 a b c (const k) Z3.paramsSetSymbol
-  ParamsSetUInt     a b c k -> wrap3 a b c (const k) Z3.paramsSetUInt
-  ParamsToString    a     k -> wrap1 a            k  Z3.paramsToString
-  Simplify          a     k -> wrap1 a            k  Z3.simplify
+  AddConstInterp             a b c       k -> wrap3 a b c       (const k) Z3.addConstInterp
+  AddFuncInterp              a b c       k -> wrap3 a b c              k  Z3.addFuncInterp
+  AndThenTactic              a b         k -> wrap2 a b                k  Z3.andThenTactic
+  AppToAst                   a           k -> wrap1 a                  k  Z3.appToAst
+  ApplyTactic                a b         k -> wrap2 a b                k  Z3.applyTactic
+  AstToString                a           k -> wrap1 a                  k  Z3.astToString
+  BenchmarkToSMTLibString    a b c d e f k -> wrap6 a b c d e f        k  Z3.benchmarkToSMTLibString
+  FixedpointAddRule          a b c       k -> wrap3 a b c       (const k) Z3.fixedpointAddRule
+  FixedpointGetAnswer        a           k -> wrap1 a                  k  Z3.fixedpointGetAnswer
+  FixedpointGetAssertions    a           k -> wrap1 a                  k  Z3.fixedpointGetAssertions
+  FixedpointPop              a           k -> wrap1 a           (const k) Z3.fixedpointPop
+  FixedpointPush             a           k -> wrap1 a           (const k) Z3.fixedpointPush
+  FixedpointQueryRelations   a b         k -> wrap2 a b                k  Z3.fixedpointQueryRelations
+  FixedpointRegisterRelation a b         k -> wrap2 a b         (const k) Z3.fixedpointRegisterRelation
+  FixedpointSetParams        a b         k -> wrap2 a b         (const k) Z3.fixedpointSetParams
+  FuncDeclToString           a           k -> wrap1 a                  k  Z3.funcDeclToString
+  FuncEntryGetArg            a b         k -> wrap2 a b                k  Z3.funcEntryGetArg
+  FuncEntryGetNumArgs        a           k -> wrap1 a                  k  Z3.funcEntryGetNumArgs
+  FuncEntryGetValue          a           k -> wrap1 a                  k  Z3.funcEntryGetValue
+  FuncInterpGetArity         a           k -> wrap1 a                  k  Z3.funcInterpGetArity
+  FuncInterpGetElse          a           k -> wrap1 a                  k  Z3.funcInterpGetElse
+  FuncInterpGetEntry         a b         k -> wrap2 a b                k  Z3.funcInterpGetEntry
+  FuncInterpGetNumEntries    a           k -> wrap1 a                  k  Z3.funcInterpGetNumEntries
+  GetAppArg                  a b         k -> wrap2 a b                k  Z3.getAppArg
+  GetAppDecl                 a           k -> wrap1 a                  k  Z3.getAppDecl
+  GetAppNumArgs              a           k -> wrap1 a                  k  Z3.getAppNumArgs
+  GetApplyResultNumSubgoals  a           k -> wrap1 a                  k  Z3.getApplyResultNumSubgoals
+  GetApplyResultSubgoal      a b         k -> wrap2 a b                k  Z3.getApplyResultSubgoal
+  GetArity                   a           k -> wrap1 a                  k  Z3.getArity
+  GetArraySortDomain         a           k -> wrap1 a                  k  Z3.getArraySortDomain
+  GetArraySortRange          a           k -> wrap1 a                  k  Z3.getArraySortRange
+  GetAsArrayFuncDecl         a           k -> wrap1 a                  k  Z3.getAsArrayFuncDecl
+  GetAstKind                 a           k -> wrap1 a                  k  Z3.getAstKind
+  GetBoolValue               a           k -> wrap1 a                  k  Z3.getBoolValue
+  GetBvSortSize              a           k -> wrap1 a                  k  Z3.getBvSortSize
+  GetConstDecl               a b         k -> wrap2 a b                k  Z3.getConstDecl
+  GetConstInterp             a b         k -> wrap2 a b                k  Z3.getConstInterp
+  MkAdd                      a           k -> wrap1 a                  k  Z3.mkAdd
+  MkAnd                      a           k -> wrap1 a                  k  Z3.mkAnd
+  MkApp                      a b         k -> wrap2 a b                k  Z3.mkApp
+  MkArraySort                a b         k -> wrap2 a b                k  Z3.mkArraySort
+  MkBoolSort                             k -> wrap0                    k  Z3.mkBoolSort
+  MkDistinct                 a           k -> wrap1 a                  k  Z3.mkDistinct
+  MkEq                       a b         k -> wrap2 a b                k  Z3.mkEq
+  MkFalse                                k -> wrap0                    k  Z3.mkFalse
+  MkFuncDecl                 a b c       k -> wrap3 a b c              k  Z3.mkFuncDecl
+  MkGe                       a b         k -> wrap2 a b                k  Z3.mkGe
+  MkGt                       a b         k -> wrap2 a b                k  Z3.mkGt
+  MkIff                      a b         k -> wrap2 a b                k  Z3.mkIff
+  MkImplies                  a b         k -> wrap2 a b                k  Z3.mkImplies
+  MkIntSort                              k -> wrap0                    k  Z3.mkIntSort
+  MkInteger                  a           k -> wrap1 a                  k  Z3.mkInteger
+  MkIntSymbol                a           k -> wrap1 a                  k  Z3.mkIntSymbol
+  MkIte                      a b c       k -> wrap3 a b c              k  Z3.mkIte
+  MkLe                       a b         k -> wrap2 a b                k  Z3.mkLe
+  MkLt                       a b         k -> wrap2 a b                k  Z3.mkLt
+  MkMul                      a           k -> wrap1 a                  k  Z3.mkMul
+  MkNot                      a           k -> wrap1 a                  k  Z3.mkNot
+  MkOr                       a           k -> wrap1 a                  k  Z3.mkOr
+  MkParams                               k -> wrap0                    k  Z3.mkParams
+  MkSolver                               k -> wrap0                    k  Z3.mkSolver
+  MkStore                    a b c       k -> wrap3 a b c              k  Z3.mkStore
+  MkStringSymbol             a           k -> wrap1 a                  k  Z3.mkStringSymbol
+  MkSub                      a           k -> wrap1 a                  k  Z3.mkSub
+  MkTrue                                 k -> wrap0                    k  Z3.mkTrue
+  MkUnaryMinus               a           k -> wrap1 a                  k  Z3.mkUnaryMinus
+  MkXor                      a b         k -> wrap2 a b                k  Z3.mkXor
+  ModelToString              a           k -> wrap1 a                  k  Z3.modelToString
+  ParamsSetBool              a b c       k -> wrap3 a b c       (const k) Z3.paramsSetBool
+  ParamsSetDouble            a b c       k -> wrap3 a b c       (const k) Z3.paramsSetDouble
+  ParamsSetSymbol            a b c       k -> wrap3 a b c       (const k) Z3.paramsSetSymbol
+  ParamsSetUInt              a b c       k -> wrap3 a b c       (const k) Z3.paramsSetUInt
+  ParamsToString             a           k -> wrap1 a                  k  Z3.paramsToString
+  Simplify                   a           k -> wrap1 a                  k  Z3.simplify
 
   SolverAssertCnstr a k -> wrap2 solver a (const k) Z3.solverAssertCnstr
   SolverCheck         k -> wrap1 solver          k  Z3.solverCheck
   SolverGetModel      k -> wrap1 solver          k  Z3.solverGetModel
 
   where
-    wrap0 ::
-         MonadIO m
-      => (a -> b)
-      -> (Context -> IO a)
-      -> m b
-    wrap0 k f =
-      k <$> liftIO (f ctx)
+    wrap0 :: (Carrier sig m, Member (Error Z3Error) sig, MonadIO m) => (a -> b) -> (Context -> IO a) -> m b
+    wrap1 :: (Carrier sig m, Member (Error Z3Error) sig, MonadIO m) => a -> (b -> c) -> (Context -> a -> IO b) -> m c
+    wrap2 :: (Carrier sig m, Member (Error Z3Error) sig, MonadIO m) => a -> b -> (c -> d) -> (Context -> a -> b -> IO c) -> m d
+    wrap3 :: (Carrier sig m, Member (Error Z3Error) sig, MonadIO m) => a -> b -> c -> (d -> e) -> (Context -> a -> b -> c -> IO d) -> m e
+    wrap6 :: (Carrier sig m, Member (Error Z3Error) sig, MonadIO m) => a -> b -> c -> d -> e -> f -> (g -> h) -> (Context -> a -> b -> c -> d -> e -> f -> IO g) -> m h
 
-    wrap1 ::
-         MonadIO m
-      => a
-      -> (b -> c)
-      -> (Context -> a -> IO b)
-      -> m c
-    wrap1 a k f =
-      k <$> liftIO (f ctx a)
+    wrap0             k f = sendZ3 (f ctx)             k
+    wrap1 a           k f = sendZ3 (f ctx a)           k
+    wrap2 a b         k f = sendZ3 (f ctx a b)         k
+    wrap3 a b c       k f = sendZ3 (f ctx a b c)       k
+    wrap6 a b c d e g k f = sendZ3 (f ctx a b c d e g) k
 
-    wrap2 ::
-         MonadIO m
-      => a
-      -> b
-      -> (c -> d)
-      -> (Context -> a -> b -> IO c)
-      -> m d
-    wrap2 a b k f =
-      k <$> liftIO (f ctx a b)
+    sendZ3 ::
+          ( Carrier sig m
+          , Member (Error Z3Error) sig
+          , MonadIO m
+          )
+       => IO a
+       -> (a -> b)
+       -> m b
+    sendZ3 m k =
+      liftIO (tryZ3 m) >>=
+        either throwError (pure . k)
 
-    wrap3 ::
-         MonadIO m
-      => a
-      -> b
-      -> c
-      -> (d -> e)
-      -> (Context -> a -> b -> c -> IO d)
-      -> m e
-    wrap3 a b c k f =
-      k <$> liftIO (f ctx a b c)
-
+    tryZ3 :: IO a -> IO (Either Z3Error a)
+    tryZ3 = try
 
 data Env
   = Env
@@ -597,7 +764,10 @@ data Env
 
 
 runZ3 ::
-     MonadIO m
+     ( Carrier sig m
+     , Member (Error Z3Error) sig
+     , MonadIO m
+     )
   => Z3C m a
   -> m a
 runZ3 action = do
